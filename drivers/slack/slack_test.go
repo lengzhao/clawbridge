@@ -64,7 +64,7 @@ func TestNewSlackDriver(t *testing.T) {
 	t.Run("missing bot token", func(t *testing.T) {
 		_, err := New(ctx, config.ClientConfig{
 			ID: "s1",
-			Credentials: map[string]any{
+			Options: map[string]any{
 				"app_token": "xapp-test",
 			},
 		}, deps)
@@ -76,7 +76,7 @@ func TestNewSlackDriver(t *testing.T) {
 	t.Run("missing app token", func(t *testing.T) {
 		_, err := New(ctx, config.ClientConfig{
 			ID: "s1",
-			Credentials: map[string]any{
+			Options: map[string]any{
 				"bot_token": "xoxb-test",
 			},
 		}, deps)
@@ -88,7 +88,7 @@ func TestNewSlackDriver(t *testing.T) {
 	t.Run("valid config", func(t *testing.T) {
 		drv, err := New(ctx, config.ClientConfig{
 			ID: "slack-1",
-			Credentials: map[string]any{
+			Options: map[string]any{
 				"bot_token": "xoxb-test",
 				"app_token": "xapp-test",
 				"allow_from": []string{"U123"},

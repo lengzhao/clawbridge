@@ -59,14 +59,14 @@ type driver struct {
 	run    atomic.Bool
 }
 
-// New builds a Feishu driver from client credentials (websocket long connection).
+// New builds a Feishu driver from client options (websocket long connection).
 //
-// Expected credentials keys: app_id, app_secret, encrypt_key, verification_token (strings);
+// Expected options keys: app_id, app_secret, encrypt_key, verification_token (strings);
 // optional is_lark (bool), allow_from ([]string or comma string), group_trigger ({ mention_only, prefixes }).
 // 完整 YAML 示例见仓库 docs/public-api.md（「飞书 driver 配置示例」小节）。
 func New(ctx context.Context, cfg config.ClientConfig, deps client.Deps) (client.Driver, error) {
 	_ = ctx
-	cred := cfg.Credentials
+	cred := cfg.Options
 	if cred == nil {
 		cred = map[string]any{}
 	}

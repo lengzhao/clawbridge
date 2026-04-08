@@ -9,6 +9,7 @@ package drivers
 
 import (
 	_ "github.com/lengzhao/clawbridge/drivers/feishu"
+	_ "github.com/lengzhao/clawbridge/drivers/webchat"
 	_ "github.com/lengzhao/clawbridge/drivers/noop"
 	_ "github.com/lengzhao/clawbridge/drivers/slack"
 )

@@ -6,7 +6,7 @@ import (
 	"github.com/lengzhao/clawbridge/bus"
 )
 
-// groupTrigger mirrors PicoClaw GroupTriggerConfig for YAML credentials.
+// groupTrigger mirrors PicoClaw GroupTriggerConfig for YAML client options.
 type groupTrigger struct {
 	MentionOnly bool
 	Prefixes    []string

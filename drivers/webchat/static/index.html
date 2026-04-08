@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Clawbridge · Webchat</title>
+  <style>
+    :root {
+      --bg: #212121;
+      --sidebar: #171717;
+      --surface: #2f2f2f;
+      --surface-hover: #3a3a3a;
+      --border: #424242;
+      --text: #ececec;
+      --text-muted: #9b9b9b;
+      --accent: #10a37f;
+      --accent-hover: #0d8f6e;
+      --user-bg: #2f2f2f;
+      --assistant-bg: #1e1e1e;
+      --radius: 12px;
+      --font: "Söhne", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: row;
+      overflow: hidden;
+    }
+    #sidebar {
+      width: 260px;
+      flex-shrink: 0;
+      background: var(--sidebar);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      padding: 12px 10px;
+    }
+    #sidebar h2 {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 8px 8px 12px;
+    }
+    button.new-chat {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text);
+      font-size: 14px;
+      cursor: pointer;
+      text-align: left;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    button.new-chat:hover { background: var(--surface-hover); }
+    #session-list {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .session-item {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: none;
+      background: transparent;
+      color: var(--text);
+      font-size: 13px;
+      cursor: pointer;
+      text-align: left;
+      line-height: 1.35;
+      word-break: break-word;
+    }
+    .session-item:hover { background: var(--surface-hover); }
+    .session-item.active {
+      background: var(--surface);
+      border: 1px solid var(--border);
+    }
+    #main-col {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      overflow: hidden;
+    }
+    header {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+    }
+    header h1 {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+    header span { font-size: 12px; color: var(--text-muted); }
+    #status {
+      font-size: 12px;
+      color: var(--text-muted);
+      min-height: 1.2em;
+    }
+    #status.processing { color: #eab308; }
+    #status.failed { color: #f87171; }
+    main {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 16px 120px;
+      scroll-behavior: smooth;
+    }
+    .wrap {
+      max-width: 768px;
+      margin: 0 auto;
+    }
+    .msg {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 24px;
+      animation: fade 0.25s ease;
+    }
+    @keyframes fade {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .msg.user { flex-direction: row-reverse; }
+    .avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 4px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .msg.user .avatar { background: var(--accent); color: #fff; }
+    .msg.assistant .avatar { background: var(--surface); color: var(--text-muted); }
+    .bubble {
+      max-width: min(100%, 600px);
+      padding: 12px 16px;
+      border-radius: var(--radius);
+      line-height: 1.6;
+      font-size: 15px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .msg.user .bubble {
+      background: var(--user-bg);
+      border: 1px solid var(--border);
+    }
+    .msg.assistant .bubble {
+      background: var(--assistant-bg);
+      border: 1px solid transparent;
+    }
+    .composer-outer {
+      flex-shrink: 0;
+      padding: 12px 16px 20px;
+      background: linear-gradient(to top, var(--bg) 70%, transparent);
+      border-top: 1px solid var(--border);
+    }
+    .composer {
+      max-width: 768px;
+      margin: 0 auto;
+      display: flex;
+      align-items: flex-end;
+      gap: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 26px;
+      padding: 8px 8px 8px 16px;
+    }
+    .composer:focus-within {
+      border-color: #565656;
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.06);
+    }
+    textarea {
+      flex: 1;
+      min-height: 24px;
+      max-height: 200px;
+      resize: none;
+      border: none;
+      background: transparent;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 15px;
+      line-height: 24px;
+      padding: 8px 0;
+      outline: none;
+    }
+    textarea::placeholder { color: var(--text-muted); }
+    button.send {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: none;
+      background: var(--accent);
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: background 0.15s;
+    }
+    button.send:hover:not(:disabled) { background: var(--accent-hover); }
+    button.send:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    button.send svg { width: 18px; height: 18px; }
+    .empty {
+      text-align: center;
+      color: var(--text-muted);
+      padding: 48px 24px;
+      font-size: 15px;
+      line-height: 1.7;
+    }
+  </style>
+</head>
+<body>
+  <aside id="sidebar">
+    <h2>会话</h2>
+    <button type="button" class="new-chat" id="btn-new" title="新对话">
+      <span>＋</span> 新对话
+    </button>
+    <div id="session-list"></div>
+  </aside>
+  <div id="main-col">
+    <header>
+      <h1>Clawbridge</h1>
+      <span>会话与历史仅保存在本机浏览器</span>
+    </header>
+    <div class="wrap" style="flex-shrink:0;padding:8px 16px 0;">
+      <div id="status"></div>
+    </div>
+    <main id="scroll"><div class="wrap" id="list"></div></main>
+    <div class="composer-outer">
+      <form class="composer" id="form" autocomplete="off">
+        <textarea id="input" rows="1" placeholder="发送消息… (Enter 发送，Shift+Enter 换行)" aria-label="消息"></textarea>
+        <button type="submit" class="send" id="btn" title="发送" aria-label="发送">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+        </button>
+      </form>
+    </div>
+  </div>
+  <script>
+    (function () {
+      const base = document.querySelector("meta[name='base-path']")?.content || "";
+      const api = (p) => (base === "/" ? p : base + p);
+      const lsKey = "clawbridge.webchat.v2:" + (base === "/" ? "_" : btoa(unescape(encodeURIComponent(base))).slice(0, 48));
+      const list = document.getElementById("list");
+      const scroll = document.getElementById("scroll");
+      const input = document.getElementById("input");
+      const form = document.getElementById("form");
+      const btn = document.getElementById("btn");
+      const statusEl = document.getElementById("status");
+      const sessionListEl = document.getElementById("session-list");
+      const btnNew = document.getElementById("btn-new");
+      const byId = new Map();
+
+      let db = { sessions: [], messages: {} };
+      let activeChatId = null;
+      let es = null;
+
+      function loadDB() {
+        try {
+          const raw = localStorage.getItem(lsKey);
+          if (!raw) return { sessions: [], messages: {} };
+          const o = JSON.parse(raw);
+          return {
+            sessions: Array.isArray(o.sessions) ? o.sessions : [],
+            messages: o.messages && typeof o.messages === "object" ? o.messages : {},
+          };
+        } catch (_) {
+          return { sessions: [], messages: {} };
+        }
+      }
+      function saveDB() {
+        try {
+          localStorage.setItem(lsKey, JSON.stringify(db));
+        } catch (_) {}
+      }
+      function newChatId() {
+        return "wc-" + (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + "-" + Math.random().toString(36).slice(2));
+      }
+      function createLocalSession() {
+        const chat_id = newChatId();
+        const now = Math.floor(Date.now() / 1000);
+        db.sessions.unshift({ chat_id, title: "新对话", updated_at: now });
+        db.messages[chat_id] = [];
+        saveDB();
+        return chat_id;
+      }
+      function touchSession(cid) {
+        const s = db.sessions.find((x) => x.chat_id === cid);
+        if (s) s.updated_at = Math.floor(Date.now() / 1000);
+      }
+      function orderedSessions() {
+        return [...db.sessions].sort((a, b) => b.updated_at - a.updated_at);
+      }
+      function persistEvent(ev) {
+        if (ev.type === "status") return;
+        const cid = ev.chat_id;
+        if (!cid) return;
+        if (!db.messages[cid]) db.messages[cid] = [];
+        const row = { t: ev.type, role: ev.role, id: ev.id, text: ev.text || "" };
+        db.messages[cid].push(row);
+        if (db.messages[cid].length > 500) {
+          db.messages[cid] = db.messages[cid].slice(-500);
+        }
+        if (ev.type === "message" && ev.role === "user") {
+          const sess = db.sessions.find((x) => x.chat_id === cid);
+          if (sess && sess.title === "新对话") {
+            let t = (ev.text || "").trim();
+            if (t.length > 48) t = t.slice(0, 45) + "…";
+            if (t) sess.title = t;
+          }
+        }
+        touchSession(cid);
+        saveDB();
+      }
+      function replayChat(cid) {
+        clearMessages();
+        statusEl.textContent = "";
+        statusEl.className = "";
+        const arr = db.messages[cid] || [];
+        const textById = new Map();
+        const order = [];
+        for (const row of arr) {
+          if (row.t === "message") {
+            order.push(row.id);
+            textById.set(row.id, { role: row.role, text: row.text || "" });
+          } else if (row.t === "edit" && textById.has(row.id)) {
+            textById.get(row.id).text = row.text || "";
+          }
+        }
+        const seen = new Set();
+        for (const id of order) {
+          if (seen.has(id)) continue;
+          seen.add(id);
+          const m = textById.get(id);
+          if (m) addBubble(m.role, id, m.text);
+        }
+        renderEmpty();
+        scrollBottom();
+      }
+      function scrollBottom() {
+        scroll.scrollTop = scroll.scrollHeight;
+      }
+      function renderEmpty() {
+        if (list.children.length === 0) {
+          const d = document.createElement("div");
+          d.className = "empty";
+          d.textContent = "选择或创建会话后输入消息；列表与记录保存在浏览器本地存储，刷新后仍在。每条会话有独立 chat_id。";
+          list.appendChild(d);
+        }
+      }
+      function clearEmpty() {
+        const e = list.querySelector(".empty");
+        if (e) e.remove();
+      }
+      function clearMessages() {
+        list.innerHTML = "";
+        byId.clear();
+      }
+      function addBubble(role, id, text) {
+        clearEmpty();
+        const row = document.createElement("div");
+        row.className = "msg " + role;
+        row.dataset.id = id;
+        const av = document.createElement("div");
+        av.className = "avatar";
+        av.textContent = role === "user" ? "我" : "AI";
+        const bubble = document.createElement("div");
+        bubble.className = "bubble";
+        bubble.textContent = text;
+        row.appendChild(av);
+        row.appendChild(bubble);
+        list.appendChild(row);
+        byId.set(id, { row, bubble });
+        scrollBottom();
+      }
+      function editBubble(id, text) {
+        const o = byId.get(id);
+        if (o) o.bubble.textContent = text;
+      }
+      function applyEvent(ev) {
+        persistEvent(ev);
+        if (ev.chat_id && activeChatId && ev.chat_id !== activeChatId) {
+          renderSidebar();
+          return;
+        }
+        if (ev.type === "message") {
+          addBubble(ev.role, ev.id, ev.text || "");
+        } else if (ev.type === "edit") {
+          editBubble(ev.id, ev.text || "");
+        } else if (ev.type === "status") {
+          const mid = ev.message_id || "";
+          const st = ev.state || "";
+          if (st === "processing") {
+            statusEl.textContent = mid ? "处理中… (" + mid + ")" : "处理中…";
+            statusEl.className = "processing";
+          } else if (st === "completed") {
+            statusEl.textContent = "";
+            statusEl.className = "";
+          } else if (st === "failed") {
+            statusEl.textContent = "上次回复失败";
+            statusEl.className = "failed";
+          } else {
+            statusEl.textContent = st ? st : "";
+            statusEl.className = "";
+          }
+        }
+      }
+      function renderSidebar() {
+        sessionListEl.innerHTML = "";
+        orderedSessions().forEach((s) => {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = "session-item" + (s.chat_id === activeChatId ? " active" : "");
+          b.textContent = s.title || s.chat_id;
+          b.title = s.chat_id;
+          b.addEventListener("click", () => setActiveChat(s.chat_id));
+          sessionListEl.appendChild(b);
+        });
+      }
+      function disconnectSSE() {
+        if (es) {
+          es.close();
+          es = null;
+        }
+      }
+      function connectSSE() {
+        disconnectSSE();
+        if (!activeChatId) return;
+        const url = api("/api/events?chat_id=" + encodeURIComponent(activeChatId));
+        es = new EventSource(url);
+        es.addEventListener("chat", (e) => {
+          try {
+            applyEvent(JSON.parse(e.data));
+          } catch (_) {}
+        });
+        es.onerror = () => {
+          es.close();
+          es = null;
+          setTimeout(connectSSE, 3000);
+        };
+      }
+      function setActiveChat(chatId) {
+        activeChatId = chatId;
+        renderSidebar();
+        replayChat(chatId);
+        connectSSE();
+        input.focus();
+      }
+      function bootstrap() {
+        db = loadDB();
+        if (!db.sessions.length) {
+          createLocalSession();
+        }
+        renderSidebar();
+        setActiveChat(orderedSessions()[0].chat_id);
+      }
+      btnNew.addEventListener("click", () => {
+        const cid = createLocalSession();
+        renderSidebar();
+        setActiveChat(cid);
+      });
+      input.addEventListener("input", () => {
+        input.style.height = "auto";
+        input.style.height = Math.min(input.scrollHeight, 200) + "px";
+      });
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          form.requestSubmit();
+        }
+      });
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        if (!activeChatId) {
+          alert("请先创建会话");
+          return;
+        }
+        const text = input.value.trim();
+        if (!text) return;
+        btn.disabled = true;
+        input.value = "";
+        input.style.height = "auto";
+        try {
+          const r = await fetch(api("/api/send"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: activeChatId, content: text }),
+          });
+          if (!r.ok) {
+            const err = await r.json().catch(() => ({}));
+            alert(err.error || "发送失败");
+          } else {
+            touchSession(activeChatId);
+            saveDB();
+            renderSidebar();
+          }
+        } catch (err) {
+          alert("网络错误");
+        }
+        btn.disabled = false;
+        input.focus();
+      });
+      bootstrap();
+    })();
+  </script>
+</body>
+</html>

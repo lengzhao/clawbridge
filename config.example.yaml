@@ -10,7 +10,7 @@ clients:
   - id: feishu-bot-1
     driver: feishu
     enabled: false
-    credentials:
+    options:
       app_id: cli_xxxxxxxx
       app_secret: "your_app_secret"
       verification_token: "your_verification_token"
@@ -23,16 +23,13 @@ clients:
         prefixes:
           - /ask
           - /bot
-    # 可选：需要 Webhook 的 driver 可配置监听（飞书当前实现为 WS，可不填）
-    # http:
-    #   listen: ":8080"
-    #   path: /webhook/feishu/1
+    # webchat 等在 options 下使用 listen / path（见 webchat 示例）
 
   # Slack：Socket Mode（见 drivers/slack）
   - id: slack-bot-1
     driver: slack
     enabled: false
-    credentials:
+    options:
       bot_token: "xoxb-..."
       app_token: "xapp-..."
       allow_from:
@@ -41,6 +38,15 @@ clients:
         mention_only: true
         prefixes:
           - /ask
+
+  # 本地浏览器聊天 UI（类 ChatGPT），经 HTTP + SSE 与总线交互；仅建议绑定 127.0.0.1
+  - id: webchat-1
+    driver: webchat
+    enabled: false
+    options:
+      display_name: You
+      listen: "127.0.0.1:8765"
+      path: /
 
   # 占位/测试用 driver
   - id: noop-1

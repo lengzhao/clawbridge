@@ -101,19 +101,18 @@ clients:
   - id: feishu-bot-1
     driver: feishu
     enabled: true
-    credentials: {}
-    http:
-      listen: ":8080"
-      path: "/webhook/feishu/1"
-  - id: tg-secondary
-    driver: telegram
+    options: {}
+  - id: webchat-1
+    driver: webchat
     enabled: true
-    credentials: {}
+    options:
+      listen: "127.0.0.1:8765"
+      path: /
 ```
 
 - **`id`**：贯穿日志、`InboundMessage.Channel`、临时文件 **scope**（用于按会话/消息批量清理），支持多账号并存。
 - **`driver`** → 注册表查找构造函数（对齐 PicoClaw `RegisterFactory` 模式）。
-- **`http.listen` / `path`**：配置项可保留供 **各 Driver 文档**约定；**clawbridge 不在 Manager 层**把多个 client 挂到**同一个**监听端口的 mux 上。若需单端口多路径，由宿主写自己的 `http.Server`，在路由里分发给各 Driver 提供的 `Handler`（若该 Driver 暴露）或反向代理。
+- **HTTP 监听**（如 `webchat`、未来 webhook 类 driver）：由 **各 Driver 文档**在 **`options` 内**约定字段（例如 webchat 的 `listen` / `path`）；**clawbridge 不在 Manager 层**把多个 client 挂到**同一个**监听端口的 mux 上。若需单端口多路径，由宿主写自己的 `http.Server`，在路由里分发给各 Driver 提供的 `Handler`（若该 Driver 暴露）或反向代理。
 
 ### 3.3 收发：文本与文件
 

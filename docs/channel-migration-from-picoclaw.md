@@ -10,7 +10,7 @@
 |------|---------------------|----------------------|
 | 注册方式 | `channels.RegisterFactory(name, func(cfg *config.Config, bus) (Channel, error))` | `client.RegisterDriver(name, func(ctx, cfg ClientConfig, deps Deps) (Driver, error))` |
 | 核心接口 | `Channel`：含 `Send` 返回 `[]string`、`IsRunning`、`IsAllowed` 等 | `Driver`：仅 `Name`、`Start`、`Stop`、`Send` |
-| 配置 | 嵌在全局 `config.Config` 的各通道大块（如 `Channels.Telegram`） | 每条客户端一行 `ClientConfig` + **`credentials` map** |
+| 配置 | 嵌在全局 `config.Config` 的各通道大块（如 `Channels.Telegram`） | 每条客户端一行 `ClientConfig` + **`options` map** |
 | 入站 | `BaseChannel.HandleMessage` → `bus.PublishInbound`（PicoClaw 的 `bus.InboundMessage`） | 自行组 **`github.com/lengzhao/clawbridge/bus.InboundMessage`** → `deps.Bus.PublishInbound` |
 | 出站文本 | `Send(ctx, bus.OutboundMessage)`，`Content` + `ChatID` | `Send(ctx, *bus.OutboundMessage)`：`Text` + **`To.ChatID`**，且 **`msg.ClientID`** 由宿主填写 |
 | 出站媒体 | 常走 **`OutboundMediaMessage`** + `MediaPart.Ref`（`media://…`）+ **`MediaStore.Resolve`** | **同一 `OutboundMessage`** 里 **`Parts []MediaPart`**，`Path` 为 **Locator**（本地路径 / `s3://` / …），用 **`deps.Media.Open`** 读流上传 |
@@ -29,7 +29,7 @@
 3. **建包** `drivers/<name>/`，参考下列文件布局。
 4. **先跑通** `Start` + 一条假入站或真实 webhook/长连接 + `PublishInbound`。
 5. **再实现** `Send`（文本 + 如有附件则 `Open` 上传）。
-6. **最后** 把 `allow_from` / `group_trigger` 等从原 config 挪到 **`credentials`**（或后续扩展 `ClientConfig`）。
+6. **最后** 把 `allow_from` / `group_trigger` 等从原 config 挪到 **`options`**（或后续扩展 `ClientConfig`）。
 
 ---
 
@@ -41,7 +41,7 @@ drivers/
     init.go          // package <name>; func init() { client.RegisterDriver("<name>", New) }
     <name>_64.go     // 若依赖仅 64 位 SDK，可用 build tag；否则单文件即可
     <name>_32.go     // 可选：32 位架构上 New 返回明确错误（见 feishu）
-    creds.go         // 可选：从 map[string]any 解析 credentials
+    creds.go         // 可选：从 map[string]any 解析 options
     ...              // 平台协议实现
 ```
 
@@ -60,7 +60,7 @@ func New(ctx context.Context, cfg config.ClientConfig, deps client.Deps) (client
 ```
 
 - **`cfg.ID`**：实例唯一 id，应写入入站 **`InboundMessage.Channel`**（与 `OutboundMessage.ClientID` 对应），也用于日志与媒体 **`Put` 的 scope** 分段。
-- **`cfg.Credentials`**：把原 `config.Channels.XXX` 的字段平铺或嵌套进 YAML/JSON 解码后的 map；用辅助函数读 `string` / `bool` / `[]string`（可参考 `drivers/feishu/creds.go`）。
+- **`cfg.Options`**：把原 `config.Channels.XXX` 的字段平铺或嵌套进 YAML/JSON 解码后的 map；用辅助函数读 `string` / `bool` / `[]string`（可参考 `drivers/feishu/creds.go`）。
 - **`deps.Bus`**：`*bus.MessageBus`，入站 **`PublishInbound`**。
 - **`deps.Media`**：`media.Backend`，入站 **`Put`**、出站 **`Open`**。
 
@@ -140,7 +140,7 @@ PicoClaw 使用 **`channels.ErrTemporary`**、**`ErrRateLimit`** 等供 Manager 
 根目录 **`config.example.yaml`** 与 **`docs/public-api.md`** 中有 **`feishu`** 的 YAML 样例。新 driver 建议：
 
 - 在 **`config.example.yaml`** 增加一段注释掉的 `clients` 条目；
-- 在 **`docs/public-api.md`** 或本文件增加一小节说明 **`credentials` 键名**。
+- 在 **`docs/public-api.md`** 或本文件增加一小节说明 **`options` 键名**。
 
 ---
 
@@ -163,7 +163,7 @@ PicoClaw 使用 **`channels.ErrTemporary`**、**`ErrRateLimit`** 等供 Manager 
 | `drivers/noop/noop.go` | 最小 **`Driver`** 骨架 |
 | `drivers/feishu/init.go` | 注册入口 |
 | `drivers/feishu/feishu_64.go` | WebSocket 入站、`Send` 卡片/文本/附件、`fetchBotOpenID` |
-| `drivers/feishu/creds.go` | `credentials` 解析 |
+| `drivers/feishu/creds.go` | `options` 解析 |
 | `drivers/feishu/allowlist.go` | allowlist + 群触发 |
 
 按通道复杂度，**Telegram / Discord / Slack** 等与 **`BaseChannel` + Manager** 绑定较深，迁移工作量主要在 **去掉 PlaceholderRecorder 链路** 与 **合并 `OutboundMediaMessage` 到单一 `OutboundMessage`**；**Webhook 类** 通道通常更接近 **Start 里挂 HTTP + 校验签名** 模式，与 feishu 的长连接不同但 **`Driver` 形状相同**。

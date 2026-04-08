@@ -55,11 +55,11 @@ type driver struct {
 	receivedAtNow func() int64
 }
 
-// New builds a Slack driver (Socket Mode). Credentials: bot_token, app_token (required);
+// New builds a Slack driver (Socket Mode). Options: bot_token, app_token (required);
 // optional allow_from, group_trigger (same shape as feishu driver).
 func New(ctx context.Context, cfg config.ClientConfig, deps client.Deps) (client.Driver, error) {
 	_ = ctx
-	cred := cfg.Credentials
+	cred := cfg.Options
 	if cred == nil {
 		cred = map[string]any{}
 	}

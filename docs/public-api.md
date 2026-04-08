@@ -33,18 +33,14 @@ type MediaConfig struct {
 }
 
 type ClientConfig struct {
-    ID          string         `json:"id" yaml:"id"`
-    Driver      string         `json:"driver" yaml:"driver"`
-    Enabled     bool           `json:"enabled" yaml:"enabled"`
-    Credentials map[string]any `json:"credentials,omitempty" yaml:"credentials,omitempty"`
-    HTTP        *HTTPListenConfig `json:"http,omitempty" yaml:"http,omitempty"`
-}
-
-type HTTPListenConfig struct {
-    Listen string `json:"listen" yaml:"listen"` // 由 **各 Driver** 自行解释；本库 **不** 提供多 client 共用一个端口的集中注册（见设计文档 §3.7）
-    Path   string `json:"path" yaml:"path"`
+    ID      string         `json:"id" yaml:"id"`
+    Driver  string         `json:"driver" yaml:"driver"`
+    Enabled bool           `json:"enabled" yaml:"enabled"`
+    Options map[string]any `json:"options,omitempty" yaml:"options,omitempty"` // 各 driver 私有：令牌、http 监听、触发规则等
 }
 ```
+
+需要 **HTTP 监听** 的 driver（例如 `webchat`）在 **`options` 内**约定字段（如 `listen`、`path`）。**webchat** 的会话列表与聊天记录由 **浏览器 localStorage** 持久化；服务端仅提供 `POST /api/send` 与按 `chat_id` 订阅的 `GET /api/events`（SSE），不在服务端保存聊天内容。
 
 **配置片段示例（仅本地媒体）**：
 
@@ -57,7 +53,7 @@ clients:
     enabled: true
 ```
 
-**飞书（`driver: feishu`）配置示例**（长连接；`credentials` 对应 `drivers/feishu` 解析字段）：
+**飞书（`driver: feishu`）配置示例**（长连接；`options` 对应 `drivers/feishu` 解析字段）：
 
 ```yaml
 media:
@@ -66,7 +62,7 @@ clients:
   - id: feishu-bot-1
     driver: feishu
     enabled: true
-    credentials:
+    options:
       app_id: cli_xxxxxxxx
       app_secret: "your_app_secret"
       # 事件订阅：验证与加密（与开放平台「事件订阅」配置一致）
@@ -86,14 +82,14 @@ clients:
           - /bot
 ```
 
-**Slack（`driver: slack`）配置示例**（[Socket Mode](https://api.slack.com/apis/connections/socket)；`credentials` 对应 `drivers/slack`）：
+**Slack（`driver: slack`）配置示例**（[Socket Mode](https://api.slack.com/apis/connections/socket)；`options` 对应 `drivers/slack`）：
 
 ```yaml
 clients:
   - id: slack-bot-1
     driver: slack
     enabled: true
-    credentials:
+    options:
       bot_token: "xoxb-..."
       app_token: "xapp-..."
       allow_from:

@@ -26,8 +26,8 @@ func newRetryTestFlaky(ctx context.Context, cfg config.ClientConfig, deps Deps) 
 	_ = ctx
 	_ = deps
 	n := 0
-	if cfg.Credentials != nil {
-		switch v := cfg.Credentials["_test_failures"].(type) {
+	if cfg.Options != nil {
+		switch v := cfg.Options["_test_failures"].(type) {
 		case int:
 			n = v
 		case float64:
@@ -62,7 +62,7 @@ func TestHandleOutboundSendSucceeds(t *testing.T) {
 		ID:      "x",
 		Driver:  "retrytest_flaky",
 		Enabled: true,
-		Credentials: map[string]any{
+		Options: map[string]any{
 			"_test_failures": float64(0),
 		},
 	}})
@@ -85,7 +85,7 @@ func TestHandleOutboundSendFails(t *testing.T) {
 		ID:      "x",
 		Driver:  "retrytest_flaky",
 		Enabled: true,
-		Credentials: map[string]any{
+		Options: map[string]any{
 			"_test_failures": float64(1),
 		},
 	}})
@@ -121,7 +121,7 @@ func TestOutboundSendNotifyFailure(t *testing.T) {
 		ID:      "x",
 		Driver:  "retrytest_flaky",
 		Enabled: true,
-		Credentials: map[string]any{
+		Options: map[string]any{
 			"_test_failures": float64(1),
 		},
 	}})

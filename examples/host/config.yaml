@@ -6,3 +6,10 @@ clients:
   - id: noop-1
     driver: noop
     enabled: true
+  - id: webchat-1
+    driver: webchat
+    enabled: true
+    options:
+      display_name: You
+      listen: "127.0.0.1:8765"
+      path: /
