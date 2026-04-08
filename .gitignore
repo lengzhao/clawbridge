@@ -1,0 +1,8 @@
+# 本地参考副本，体积大且非本库源码
+/tmp/
+
+.DS_Store
+*.exe
+*.test
+*.out
+/vendor/

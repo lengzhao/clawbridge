@@ -1,0 +1,8 @@
+# 本地跑通示例用：noop 不访问外网。对接飞书/Slack 可复制仓库根目录 config.example.yaml 并改 enabled。
+media:
+  root: ""
+
+clients:
+  - id: noop-1
+    driver: noop
+    enabled: true

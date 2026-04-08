@@ -1,0 +1,48 @@
+# clawbridge 配置示例；复制为 config.yaml 后按需修改。
+# 结构对应 config.Config（见 config/config.go）。
+
+media:
+  # 本地媒体根目录；空则由实现使用默认临时目录
+  root: /var/tmp/clawbridge
+
+clients:
+  # 飞书：长连接（WebSocket），见 drivers/feishu
+  - id: feishu-bot-1
+    driver: feishu
+    enabled: false
+    credentials:
+      app_id: cli_xxxxxxxx
+      app_secret: "your_app_secret"
+      verification_token: "your_verification_token"
+      encrypt_key: ""
+      is_lark: false
+      allow_from:
+        - "*"
+      group_trigger:
+        mention_only: true
+        prefixes:
+          - /ask
+          - /bot
+    # 可选：需要 Webhook 的 driver 可配置监听（飞书当前实现为 WS，可不填）
+    # http:
+    #   listen: ":8080"
+    #   path: /webhook/feishu/1
+
+  # Slack：Socket Mode（见 drivers/slack）
+  - id: slack-bot-1
+    driver: slack
+    enabled: false
+    credentials:
+      bot_token: "xoxb-..."
+      app_token: "xapp-..."
+      allow_from:
+        - "*"
+      group_trigger:
+        mention_only: true
+        prefixes:
+          - /ask
+
+  # 占位/测试用 driver
+  - id: noop-1
+    driver: noop
+    enabled: false
