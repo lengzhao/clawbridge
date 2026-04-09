@@ -193,6 +193,7 @@ type OutboundMessage struct {
 ```yaml
 media:
   backend: local          # 默认
+  # root 省略或空：os.TempDir()/clawbridge；持久化时再填绝对路径
   root: /var/tmp/clawbridge
   # 可选改为对象存储（S3 兼容：AWS S3、MinIO、OSS 等）
   # backend: s3

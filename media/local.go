@@ -18,8 +18,10 @@ type LocalBackend struct {
 	byScope map[string][]string // scope -> file paths created under this backend
 }
 
-// NewLocalBackend creates a local filesystem backend. If root is empty, os.TempDir()/clawbridge is used.
+// NewLocalBackend creates a local filesystem backend.
+// If root is empty or only whitespace, Root becomes filepath.Join(os.TempDir(), "clawbridge").
 func NewLocalBackend(root string) (*LocalBackend, error) {
+	root = strings.TrimSpace(root)
 	if root == "" {
 		root = filepath.Join(os.TempDir(), "clawbridge")
 	}

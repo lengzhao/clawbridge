@@ -131,7 +131,11 @@ func runHost(ctx context.Context, b *clawbridge.Bridge) {
 			"text", in.Content,
 		)
 		reply := "pong: " + in.Content
-		if err := b.Reply(ctx, &in, reply, ""); err != nil {
+		mediaPath := ""
+		if len(in.MediaPaths) > 0 {
+			mediaPath = in.MediaPaths[0]
+		}
+		if err := b.Reply(ctx, &in, reply, mediaPath); err != nil {
 			slog.Error("Reply", "err", err)
 		}
 	}

@@ -29,7 +29,7 @@ type Config struct {
 // MediaConfig 仅描述**内置默认**行为：本地磁盘临时文件。
 // S3、对象存储、企业网盘等**不在**配置里内置，请实现 media.Backend 并通过 WithMediaBackend 注入（见 §1.2）。
 type MediaConfig struct {
-    Root string `json:"root,omitempty" yaml:"root,omitempty"` // 本地根目录；空则使用实现默认（如 os.TempDir 子目录）
+    Root string `json:"root,omitempty" yaml:"root,omitempty"` // 本地根目录；省略、空或仅空白 → os.TempDir()/clawbridge
 }
 
 type ClientConfig struct {
@@ -40,13 +40,13 @@ type ClientConfig struct {
 }
 ```
 
-需要 **HTTP 监听** 的 driver（例如 `webchat`）在 **`options` 内**约定字段（如 `listen`、`path`）。**webchat** 的会话列表与聊天记录由 **浏览器 localStorage** 持久化；服务端仅提供 `POST /api/send` 与按 `chat_id` 订阅的 `GET /api/events`（SSE），不在服务端保存聊天内容。
+需要 **HTTP 监听** 的 driver（例如 `webchat`）在 **`options` 内**约定字段（如 `listen`、`path`）。**webchat** 的会话列表与聊天记录由 **浏览器 localStorage** 持久化；服务端提供 `POST /api/send`、`POST /api/upload`、媒体下载与 **`GET /api/events`（SSE）**：默认 **单连接广播** 所有会话事件，每条事件带 `chat_id`，由 **前端按会话分发**；不在服务端保存聊天内容。历史可选查询参数 `chat_id` 已忽略。
 
-**配置片段示例（仅本地媒体）**：
+**配置片段示例（仅本地媒体）**：不写 `media` 或 `root` 留空时，使用 **`os.TempDir()/clawbridge`**。
 
 ```yaml
-media:
-  root: /var/tmp/clawbridge
+# media:
+#   root: /var/tmp/clawbridge   # 需要固定路径时再配置
 clients:
   - id: example
     driver: example
@@ -56,8 +56,9 @@ clients:
 **飞书（`driver: feishu`）配置示例**（长连接；`options` 对应 `drivers/feishu` 解析字段）：
 
 ```yaml
-media:
-  root: /var/tmp/clawbridge
+# 同上，media 可省略（默认临时目录）
+# media:
+#   root: /var/tmp/clawbridge
 clients:
   - id: feishu-bot-1
     driver: feishu

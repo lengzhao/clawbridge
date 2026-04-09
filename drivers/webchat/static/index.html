@@ -157,8 +157,10 @@
       border-radius: var(--radius);
       line-height: 1.6;
       font-size: 15px;
-      white-space: pre-wrap;
       word-break: break-word;
+    }
+    .bubble .bubble-text {
+      white-space: pre-wrap;
     }
     .msg.user .bubble {
       background: var(--user-bg);
@@ -224,6 +226,51 @@
       cursor: not-allowed;
     }
     button.send svg { width: 18px; height: 18px; }
+    button.attach {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    button.attach:hover { color: var(--text); background: rgba(255,255,255,0.06); }
+    button.attach svg { width: 22px; height: 22px; }
+    #file-input { display: none; }
+    .file-pill {
+      font-size: 12px;
+      color: var(--text-muted);
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.06);
+      max-width: 180px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .bubble .att {
+      margin-top: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .bubble .att a {
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 14px;
+      word-break: break-all;
+    }
+    .bubble .att a:hover { text-decoration: underline; }
+    .bubble .att img {
+      max-width: 100%;
+      border-radius: 8px;
+      display: block;
+    }
     .empty {
       text-align: center;
       color: var(--text-muted);
@@ -252,7 +299,12 @@
     <main id="scroll"><div class="wrap" id="list"></div></main>
     <div class="composer-outer">
       <form class="composer" id="form" autocomplete="off">
+        <input type="file" id="file-input" />
+        <button type="button" class="attach" id="btn-attach" title="添加文件" aria-label="添加文件">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+        </button>
         <textarea id="input" rows="1" placeholder="发送消息… (Enter 发送，Shift+Enter 换行)" aria-label="消息"></textarea>
+        <span class="file-pill" id="file-pill" hidden></span>
         <button type="submit" class="send" id="btn" title="发送" aria-label="发送">
           <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
         </button>
@@ -263,7 +315,7 @@
     (function () {
       const base = document.querySelector("meta[name='base-path']")?.content || "";
       const api = (p) => (base === "/" ? p : base + p);
-      const lsKey = "clawbridge.webchat.v2:" + (base === "/" ? "_" : btoa(unescape(encodeURIComponent(base))).slice(0, 48));
+      const lsKey = "clawbridge.webchat.v3:" + (base === "/" ? "_" : btoa(unescape(encodeURIComponent(base))).slice(0, 48));
       const list = document.getElementById("list");
       const scroll = document.getElementById("scroll");
       const input = document.getElementById("input");
@@ -272,6 +324,9 @@
       const statusEl = document.getElementById("status");
       const sessionListEl = document.getElementById("session-list");
       const btnNew = document.getElementById("btn-new");
+      const fileInput = document.getElementById("file-input");
+      const btnAttach = document.getElementById("btn-attach");
+      const filePill = document.getElementById("file-pill");
       const byId = new Map();
 
       let db = { sessions: [], messages: {} };
@@ -319,7 +374,7 @@
         const cid = ev.chat_id;
         if (!cid) return;
         if (!db.messages[cid]) db.messages[cid] = [];
-        const row = { t: ev.type, role: ev.role, id: ev.id, text: ev.text || "" };
+        const row = { t: ev.type, role: ev.role, id: ev.id, text: ev.text || "", files: Array.isArray(ev.files) ? ev.files : [] };
         db.messages[cid].push(row);
         if (db.messages[cid].length > 500) {
           db.messages[cid] = db.messages[cid].slice(-500);
@@ -345,7 +400,7 @@
         for (const row of arr) {
           if (row.t === "message") {
             order.push(row.id);
-            textById.set(row.id, { role: row.role, text: row.text || "" });
+            textById.set(row.id, { role: row.role, text: row.text || "", files: row.files || [] });
           } else if (row.t === "edit" && textById.has(row.id)) {
             textById.get(row.id).text = row.text || "";
           }
@@ -355,7 +410,7 @@
           if (seen.has(id)) continue;
           seen.add(id);
           const m = textById.get(id);
-          if (m) addBubble(m.role, id, m.text);
+          if (m) addBubble(m.role, id, m.text, m.files || []);
         }
         renderEmpty();
         scrollBottom();
@@ -379,7 +434,34 @@
         list.innerHTML = "";
         byId.clear();
       }
-      function addBubble(role, id, text) {
+      function renderAttachments(container, files) {
+        if (!files || !files.length) return;
+        const wrap = document.createElement("div");
+        wrap.className = "att";
+        for (const f of files) {
+          const url = f.url || "";
+          if (!url) continue;
+          const ct = (f.content_type || "").toLowerCase();
+          const name = (f.filename || "下载").trim() || "下载";
+          if (ct.startsWith("image/")) {
+            const img = document.createElement("img");
+            img.src = url;
+            img.alt = name;
+            img.loading = "lazy";
+            wrap.appendChild(img);
+          } else {
+            const a = document.createElement("a");
+            a.href = url;
+            a.target = "_blank";
+            a.rel = "noopener noreferrer";
+            a.download = name;
+            a.textContent = name;
+            wrap.appendChild(a);
+          }
+        }
+        if (wrap.childNodes.length) container.appendChild(wrap);
+      }
+      function addBubble(role, id, text, files) {
         clearEmpty();
         const row = document.createElement("div");
         row.className = "msg " + role;
@@ -389,16 +471,20 @@
         av.textContent = role === "user" ? "我" : "AI";
         const bubble = document.createElement("div");
         bubble.className = "bubble";
-        bubble.textContent = text;
+        const t = document.createElement("div");
+        t.className = "bubble-text";
+        t.textContent = text || "";
+        bubble.appendChild(t);
+        renderAttachments(bubble, files);
         row.appendChild(av);
         row.appendChild(bubble);
         list.appendChild(row);
-        byId.set(id, { row, bubble });
+        byId.set(id, { row, bubble, textEl: t });
         scrollBottom();
       }
       function editBubble(id, text) {
         const o = byId.get(id);
-        if (o) o.bubble.textContent = text;
+        if (o && o.textEl) o.textEl.textContent = text;
       }
       function applyEvent(ev) {
         persistEvent(ev);
@@ -407,7 +493,7 @@
           return;
         }
         if (ev.type === "message") {
-          addBubble(ev.role, ev.id, ev.text || "");
+          addBubble(ev.role, ev.id, ev.text || "", ev.files || []);
         } else if (ev.type === "edit") {
           editBubble(ev.id, ev.text || "");
         } else if (ev.type === "status") {
@@ -446,19 +532,17 @@
           es = null;
         }
       }
+      /** 单条 SSE：不按会话建连；切换会话仅换本地视图，消息按 ev.chat_id 在 applyEvent 里分发。 */
       function connectSSE() {
-        disconnectSSE();
-        if (!activeChatId) return;
-        const url = api("/api/events?chat_id=" + encodeURIComponent(activeChatId));
-        es = new EventSource(url);
+        if (es != null) return;
+        es = new EventSource(api("/api/events"));
         es.addEventListener("chat", (e) => {
           try {
             applyEvent(JSON.parse(e.data));
           } catch (_) {}
         });
         es.onerror = () => {
-          es.close();
-          es = null;
+          disconnectSSE();
           setTimeout(connectSSE, 3000);
         };
       }
@@ -466,7 +550,6 @@
         activeChatId = chatId;
         renderSidebar();
         replayChat(chatId);
-        connectSSE();
         input.focus();
       }
       function bootstrap() {
@@ -475,8 +558,24 @@
           createLocalSession();
         }
         renderSidebar();
+        connectSSE();
         setActiveChat(orderedSessions()[0].chat_id);
       }
+      function clearFileSelection() {
+        fileInput.value = "";
+        filePill.hidden = true;
+        filePill.textContent = "";
+      }
+      btnAttach.addEventListener("click", () => fileInput.click());
+      fileInput.addEventListener("change", () => {
+        const f = fileInput.files && fileInput.files[0];
+        if (f) {
+          filePill.textContent = f.name;
+          filePill.hidden = false;
+        } else {
+          clearFileSelection();
+        }
+      });
       btnNew.addEventListener("click", () => {
         const cid = createLocalSession();
         renderSidebar();
@@ -499,20 +598,31 @@
           return;
         }
         const text = input.value.trim();
-        if (!text) return;
+        const file = fileInput.files && fileInput.files[0];
+        if (!text && !file) return;
         btn.disabled = true;
-        input.value = "";
-        input.style.height = "auto";
         try {
-          const r = await fetch(api("/api/send"), {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ chat_id: activeChatId, content: text }),
-          });
+          let r;
+          if (file) {
+            const fd = new FormData();
+            fd.append("chat_id", activeChatId);
+            fd.append("file", file);
+            if (text) fd.append("content", text);
+            r = await fetch(api("/api/upload"), { method: "POST", body: fd });
+          } else {
+            r = await fetch(api("/api/send"), {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ chat_id: activeChatId, content: text }),
+            });
+          }
           if (!r.ok) {
             const err = await r.json().catch(() => ({}));
             alert(err.error || "发送失败");
           } else {
+            input.value = "";
+            input.style.height = "auto";
+            clearFileSelection();
             touchSession(activeChatId);
             saveDB();
             renderSidebar();

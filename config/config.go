@@ -9,6 +9,8 @@ type Config struct {
 
 // MediaConfig configures the built-in local media backend when no custom Backend is injected.
 type MediaConfig struct {
+	// Root 为本地媒体根目录。省略、空串或仅空白 → os.TempDir()/clawbridge（见 media.NewLocalBackend）；
+	// YAML 中不写整块 media 亦为同样默认。
 	Root string `json:"root,omitempty" yaml:"root,omitempty"`
 }
 

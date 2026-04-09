@@ -12,4 +12,6 @@ import (
 	_ "github.com/lengzhao/clawbridge/drivers/webchat"
 	_ "github.com/lengzhao/clawbridge/drivers/noop"
 	_ "github.com/lengzhao/clawbridge/drivers/slack"
+	_ "github.com/lengzhao/clawbridge/drivers/telegram"
+	_ "github.com/lengzhao/clawbridge/drivers/weixin"
 )
