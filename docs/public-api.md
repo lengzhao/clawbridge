@@ -81,7 +81,14 @@ clients:
         prefixes:
           - /ask
           - /bot
+      # 可选：Bridge.UpdateStatus 在原入站消息上添加表情回复（message-reaction）时的 emoji_type
+      # 默认 processing=OnIt、completed=DONE、failed=CrossMark；见开放平台「表情文案说明」
+      # status_emoji_processing: OnIt
+      # status_emoji_completed: DONE
+      # status_emoji_failed: CrossMark
 ```
+
+宿主调用 `UpdateStatus` 时，可在 **`UpdateStatusRequest.Metadata`** 中用 **`feishu_status_emoji_processing` / `feishu_status_emoji_completed` / `feishu_status_emoji_failed`** 单次覆盖（优先级高于 `options` 与默认值）。状态切换时会先移除机器人此前为该消息添加的上一条状态表情，再添加新表情。应用需在开放平台开通 **添加/删除消息表情回复** 相关权限（如 `im:message.reaction.me:create` / `im:message.reaction.me:delete`）。
 
 **Slack（`driver: slack`）配置示例**（[Socket Mode](https://api.slack.com/apis/connections/socket)；`options` 对应 `drivers/slack`）：
 

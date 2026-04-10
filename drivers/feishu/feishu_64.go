@@ -31,6 +31,13 @@ import (
 
 const errCodeTenantTokenInvalid = 99991663
 
+// 飞书 message-reaction emoji_type，见 https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce
+const (
+	defaultStatusEmojiProcessing = "OnIt"
+	defaultStatusEmojiCompleted  = "DONE"
+	defaultStatusEmojiFailed     = "CrossMark"
+)
+
 var (
 	errNotRunning = errors.New("feishu: driver not running")
 	errTemporary  = errors.New("feishu: temporary API error")
@@ -48,6 +55,12 @@ type driver struct {
 	isLark   bool
 	allow    []string
 	group    groupTrigger
+
+	// 可选：覆盖 UpdateStatus 默认表情（options: status_emoji_processing 等）
+	statusEmojiProcessing string
+	statusEmojiCompleted  string
+	statusEmojiFailed     string
+	statusReactions       *statusReactionCache
 
 	client     *lark.Client
 	wsClient   *larkws.Client
@@ -83,6 +96,10 @@ func New(ctx context.Context, cfg config.ClientConfig, deps client.Deps) (client
 		allow:      credStringSlice(cred, "allow_from"),
 		group:      credGroupTrigger(cred, "group_trigger"),
 		tokenCache: newTokenCache(),
+		statusReactions: newStatusReactionCache(),
+		statusEmojiProcessing: strings.TrimSpace(credString(cred, "status_emoji_processing")),
+		statusEmojiCompleted:  strings.TrimSpace(credString(cred, "status_emoji_completed")),
+		statusEmojiFailed:     strings.TrimSpace(credString(cred, "status_emoji_failed")),
 	}
 	opts := []lark.ClientOptionFunc{lark.WithTokenCache(d.tokenCache)}
 	if d.isLark {
@@ -195,9 +212,90 @@ func (d *driver) Send(ctx context.Context, msg *bus.OutboundMessage) (string, er
 }
 
 func (d *driver) UpdateStatus(ctx context.Context, req *bus.UpdateStatusRequest) error {
-	_ = ctx
-	_ = req
-	return client.ErrCapabilityUnsupported
+	if req == nil {
+		return errors.New("feishu: nil UpdateStatusRequest")
+	}
+	if !d.run.Load() {
+		return errNotRunning
+	}
+	messageID := strings.TrimSpace(req.MessageID)
+	if messageID == "" {
+		return bus.ErrInvalidOutbound
+	}
+	emojiType := feishuStatusEmojiType(req, d)
+	if emojiType == "" {
+		return nil
+	}
+
+	oldReactionID := d.statusReactions.pop(messageID)
+	if oldReactionID != "" {
+		if err := d.deleteMessageReaction(ctx, messageID, oldReactionID); err != nil {
+			slog.Debug("feishu: remove previous status reaction", "client_id", d.id, "message_id", messageID, "err", err)
+		}
+	}
+
+	newID, err := d.createMessageReaction(ctx, messageID, emojiType)
+	if err != nil {
+		return err
+	}
+	d.statusReactions.put(messageID, newID)
+	return nil
+}
+
+func feishuStatusEmojiType(req *bus.UpdateStatusRequest, d *driver) string {
+	switch req.State {
+	case bus.StatusProcessing:
+		return feishuPickStatusEmoji(req.Metadata, "feishu_status_emoji_processing", d.statusEmojiProcessing, defaultStatusEmojiProcessing)
+	case bus.StatusCompleted:
+		return feishuPickStatusEmoji(req.Metadata, "feishu_status_emoji_completed", d.statusEmojiCompleted, defaultStatusEmojiCompleted)
+	case bus.StatusFailed:
+		return feishuPickStatusEmoji(req.Metadata, "feishu_status_emoji_failed", d.statusEmojiFailed, defaultStatusEmojiFailed)
+	default:
+		return ""
+	}
+}
+
+func feishuPickStatusEmoji(meta map[string]string, metaKey, driverVal, builtin string) string {
+	if meta != nil {
+		if v := strings.TrimSpace(meta[metaKey]); v != "" {
+			return v
+		}
+	}
+	if strings.TrimSpace(driverVal) != "" {
+		return strings.TrimSpace(driverVal)
+	}
+	return builtin
+}
+
+func (d *driver) createMessageReaction(ctx context.Context, messageID, emojiType string) (string, error) {
+	emoji := larkim.NewEmojiBuilder().EmojiType(emojiType).Build()
+	body := larkim.NewCreateMessageReactionReqBodyBuilder().ReactionType(emoji).Build()
+	creq := larkim.NewCreateMessageReactionReqBuilder().MessageId(messageID).Body(body).Build()
+	resp, err := d.client.Im.V1.MessageReaction.Create(ctx, creq)
+	if err != nil {
+		return "", fmt.Errorf("feishu create message reaction: %w: %w", err, errTemporary)
+	}
+	if !resp.Success() {
+		d.invalidateTokenOnAuthError(resp.Code)
+		return "", fmt.Errorf("feishu message reaction api error (code=%d msg=%s): %w", resp.Code, resp.Msg, errTemporary)
+	}
+	if resp.Data == nil || resp.Data.ReactionId == nil || strings.TrimSpace(*resp.Data.ReactionId) == "" {
+		return "", fmt.Errorf("feishu message reaction: empty reaction_id: %w", errTemporary)
+	}
+	return strings.TrimSpace(*resp.Data.ReactionId), nil
+}
+
+func (d *driver) deleteMessageReaction(ctx context.Context, messageID, reactionID string) error {
+	dreq := larkim.NewDeleteMessageReactionReqBuilder().MessageId(messageID).ReactionId(reactionID).Build()
+	resp, err := d.client.Im.V1.MessageReaction.Delete(ctx, dreq)
+	if err != nil {
+		return fmt.Errorf("feishu delete message reaction: %w", err)
+	}
+	if !resp.Success() {
+		d.invalidateTokenOnAuthError(resp.Code)
+		return fmt.Errorf("feishu delete message reaction api error (code=%d msg=%s)", resp.Code, resp.Msg)
+	}
+	return nil
 }
 
 func (d *driver) EditMessage(ctx context.Context, req *bus.EditMessageRequest) error {
@@ -769,3 +867,5 @@ func (d *driver) invalidateTokenOnAuthError(code int) {
 		slog.Warn("feishu: invalidated cached tenant token after auth error", "client_id", d.id)
 	}
 }
+
+var _ client.MessageStatusUpdater = (*driver)(nil)
