@@ -79,7 +79,7 @@ func validateOutbound(msg *OutboundMessage) error {
 	if msg == nil {
 		return ErrInvalidOutbound
 	}
-	if msg.ClientID == "" || msg.To.ChatID == "" {
+	if msg.ClientID == "" || msg.To.SessionID == "" {
 		return ErrInvalidOutbound
 	}
 	if msg.Text == "" && len(msg.Parts) == 0 {

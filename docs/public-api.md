@@ -40,7 +40,7 @@ type ClientConfig struct {
 }
 ```
 
-需要 **HTTP 监听** 的 driver（例如 `webchat`）在 **`options` 内**约定字段（如 `listen`、`path`）。**webchat** 的会话列表与聊天记录由 **浏览器 localStorage** 持久化；服务端提供 `POST /api/send`、`POST /api/upload`、媒体下载与 **`GET /api/events`（SSE）**：默认 **单连接广播** 所有会话事件，每条事件带 `chat_id`，由 **前端按会话分发**；不在服务端保存聊天内容。历史可选查询参数 `chat_id` 已忽略。
+需要 **HTTP 监听** 的 driver（例如 `webchat`）在 **`options` 内**约定字段（如 `listen`、`path`）。**webchat** 的会话列表与聊天记录由 **浏览器 localStorage** 持久化；服务端提供 `POST /api/send`、`POST /api/upload`、媒体下载与 **`GET /api/events`（SSE）**：默认 **单连接广播** 所有会话事件，每条事件带 `chat_id`（**浏览器侧会话 id**，与 bus 入站/出站的 **`SessionID` 同值**），由 **前端按会话分发**；不在服务端保存聊天内容。历史可选查询参数 `chat_id` 已忽略。
 
 **配置片段示例（仅本地媒体）**：不写 `media` 或 `root` 留空时，使用 **`os.TempDir()/clawbridge`**。
 
@@ -109,7 +109,7 @@ clients:
           - /ask
 ```
 
-出站 `To.ChatID` 使用频道 ID，可选在线程中回复：`C1234567890/1234567890.123456`（`频道ID/父消息 thread_ts`），或使用 `thread_id` / `reply_to_id` 字段（见 bus 类型）。
+出站 `Recipient.SessionID` 由各 Driver 定义；Slack 示例：`C1234567890/1234567890.123456`（`频道ID/父消息 thread_ts`），也可配合 `thread_id` / `reply_to_id`（见 bus 类型）。宿主应把 `SessionID` 视为 **不透明** 字符串，用于会话隔离并与入站 `InboundMessage.SessionID` 对拍。
 
 ### 1.2 门面：创建与生命周期
 
@@ -207,7 +207,7 @@ func UpdateStatus(ctx context.Context, req *UpdateStatusRequest) error
 func EditMessage(ctx context.Context, req *EditMessageRequest) error
 func ConsumeInbound(ctx context.Context) (InboundMessage, error)
 
-// Reply 快捷回复当前入站会话：根据 in 填充 ClientID、To（ChatID / Kind）、ReplyToID（MessageID），再发 text 与可选单附件。
+// Reply 快捷回复当前入站会话：根据 in 填充 ClientID、To（SessionID / Kind）、ReplyToID（MessageID），再发 text 与可选单附件。
 // mediaPath 为空则不带 Parts；非空则 Parts = []MediaPart{{Path: mediaPath}}（Locator 约定同 §2.3）。
 // in == nil 或 text 与 mediaPath 均为空时返回 ErrInvalidMessage。
 func Reply(ctx context.Context, in *InboundMessage, text, mediaPath string) error
@@ -222,8 +222,8 @@ func Media() media.Backend
 
 | 出站字段 | 来源 |
 |----------|------|
-| `ClientID` | `in.Channel` |
-| `To.ChatID` | `in.ChatID` |
+| `ClientID` | `in.ClientID` |
+| `To.SessionID` | `in.SessionID` |
 | `To.Kind` | `in.Peer.Kind` |
 | `To.UserID` | 默认 **不填**；若某 Driver 私聊必须填 `UserID`，宿主应使用 `PublishOutbound` 自行构造 `Recipient` |
 | `ReplyToID` | `in.MessageID` |
@@ -258,8 +258,8 @@ type SenderInfo struct {
 
 // InboundMessage 由 Driver 产生，经 Bus 交给宿主。
 type InboundMessage struct {
-    Channel    string            `json:"channel"`              // = ClientConfig.ID
-    ChatID     string            `json:"chat_id"`              // 平台会话 ID
+    ClientID   string            `json:"client_id"`             // = ClientConfig.ID（与 OutboundMessage.ClientID 对拍）
+    SessionID  string            `json:"session_id"`            // Driver 定义的**稳定会话键**；宿主用于会话隔离，勿解析结构
     MessageID  string            `json:"message_id,omitempty"` // 平台消息 ID
     Sender     SenderInfo        `json:"sender"`
     Peer       Peer              `json:"peer"`
@@ -269,11 +269,11 @@ type InboundMessage struct {
     Metadata   map[string]string `json:"metadata,omitempty"`    // 平台扩展：reply_to、raw 类型等
 }
 
-// Recipient 出站目标；ChatID 通常必填，UserID 按平台选填。
+// Recipient 出站目标；SessionID 通常必填（语义与入站 SessionID 一致），UserID 按平台选填。
 type Recipient struct {
-    ChatID string `json:"chat_id"`
-    UserID string `json:"user_id,omitempty"`
-    Kind   string `json:"kind,omitempty"` // direct | group | channel | ""
+    SessionID string `json:"session_id"`
+    UserID    string `json:"user_id,omitempty"`
+    Kind      string `json:"kind,omitempty"` // direct | group | channel | ""
 }
 
 // MediaPart 单段附件；Path 为 Media Locator（默认本地路径；自定义 Backend 下可为其它字符串）。
@@ -329,14 +329,14 @@ type EditMessageRequest struct {
 
 | 消息 | 约束 |
 |------|------|
-| **Inbound** | `Channel`、`ChatID`、`Sender`、`Peer` 应有值；`Content` 与 `MediaPaths` 可同时为空（如纯事件，实现可过滤）；`MediaPaths` 每项为 **Locator**。 |
-| **Outbound** | `ClientID`、`To.ChatID`（及平台要求的其它字段）**必填**；`Text` 与 `Parts` 至少其一非空（否则实现可返回 `ErrInvalidMessage`）；`ReplyToID` / `ThreadID` **可选**。 |
+| **Inbound** | `ClientID`、`SessionID`、`Sender`、`Peer` 应有值；`Content` 与 `MediaPaths` 可同时为空（如纯事件，实现可过滤）；`MediaPaths` 每项为 **Locator**。 |
+| **Outbound** | `ClientID`、`To.SessionID`（及平台要求的其它字段）**必填**；`Text` 与 `Parts` 至少其一非空（否则实现可返回 `ErrInvalidMessage`）；`ReplyToID` / `ThreadID` **可选**。 |
 | **UpdateStatusRequest** | `ClientID`、`To`、`MessageID`、`State` **必填**；`State` 为 §2.1 所列常量或 Driver 文档扩展值。 |
 | **EditMessageRequest** | `ClientID`、`To` **必填**；`MessageID` **可选**（空则 §2.2.1）；`Text` 与 `Parts` 是否允许全空由平台决定，实现可返回 `ErrInvalidMessage`。 |
 
 ### 2.2.1 「最后一条发送」的默认 MessageID（仅 Edit）
 
-对 **`EditMessageRequest`**：若 **`MessageID` 为空**，Driver **应**将其解析为：在本实例内，针对同一 **`ClientID` + `To`（按 `ChatID`、`Kind`、`UserID` 全字段参与匹配；空字符串与未设置视为同一键）** 下，**最近一次 `Send` 成功**所对应的那条消息的 **`MessageID`**。
+对 **`EditMessageRequest`**：若 **`MessageID` 为空**，Driver **应**将其解析为：在本实例内，针对同一 **`ClientID` + `To`（按 `SessionID`、`Kind`、`UserID` 全字段参与匹配；空字符串与未设置视为同一键）** 下，**最近一次 `Send` 成功**所对应的那条消息的 **`MessageID`**。
 
 - **仅统计 `Send`**，不包含仅由平台产生、未经过本 Driver `Send` 的消息。
 - **并发**：以 **`Send` 成功返回的先后**为准维护「最后一条」；多 goroutine 同时发送时，宿主若需编辑指定条，**应显式填写 `MessageID`**。
@@ -391,7 +391,7 @@ type Backend interface {
 }
 ```
 
-- **scope**：建议 `clientID:chatID:messageID`，与 [设计文档](./im-bridge-technical-design.md) 一致，用于 `RemoveScope` 批量清理。
+- **scope**：建议 `clientID:sessionID:messageID`，与 [设计文档](./im-bridge-technical-design.md) 一致，用于 `RemoveScope` 批量清理。
 - **默认**：Locator 为本地路径时，宿主可 `os.Open`，也可统一 `Media().Open`。
 - **自定义 Backend**：凡非普通本地路径的 Locator，由宿主在 `Open` 内处理；Driver 出站读附件时同样调用注入的 `Backend.Open`。
 
@@ -413,8 +413,8 @@ go func() {
         // 业务处理；需要读附件：
         // for _, loc := range in.MediaPaths { r, err := b.Media().Open(ctx, loc); ... }
         _ = msgBus.PublishOutbound(ctx, &bus.OutboundMessage{
-            ClientID:  in.Channel,
-            To:        bus.Recipient{ChatID: in.ChatID, Kind: in.Peer.Kind},
+            ClientID:  in.ClientID,
+            To:        bus.Recipient{SessionID: in.SessionID, Kind: in.Peer.Kind},
             Text:      "pong",
             ReplyToID: in.MessageID,
         })
@@ -523,5 +523,6 @@ var (
 
 ## 6. 版本与稳定性
 
-- 对外保证：`Bridge`、包级 `Init` / `PublishOutbound` / `Reply` 等、`Config`、消息类型（含根包别名）、`media.Backend` 在 **v1** 内尽量 **向后兼容**；破坏性变更递增主版本。
+- **破坏性变更（集成方须改字段）**：`InboundMessage` 使用 **`client_id`（原 `channel`）**、**`session_id`（原 `chat_id`）**；`Recipient` 使用 **`session_id`（原 `chat_id`）**。JSON/Go 字段与旧版 **不兼容**，升级时请全局替换并对拍各 Driver 的 `SessionID` 格式说明。
+- 对外保证：在 **同一 semver 主版本** 内，`Bridge`、包级 `Init` / `PublishOutbound` / `Reply` 等、`Config`、消息类型（含根包别名）、`media.Backend` 尽量 **向后兼容**；跨主版本以发行说明为准。
 - `Metadata` 键名由各 Driver 文档列出，**不保证** 跨 Driver 统一。

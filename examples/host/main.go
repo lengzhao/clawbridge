@@ -72,8 +72,8 @@ func main() {
 
 	// 演示入站：真实环境由 feishu/slack 等 driver 调用 PublishInbound；此处模拟一条消息。
 	demoIn := &clawbridge.InboundMessage{
-		Channel:   firstEnabledClientID(cfg),
-		ChatID:    "demo-chat",
+		ClientID:  firstEnabledClientID(cfg),
+		SessionID: "demo-chat",
 		MessageID: "demo-msg-1",
 		Sender: clawbridge.SenderInfo{
 			CanonicalID: "noop:demo-user",
@@ -82,7 +82,7 @@ func main() {
 		Peer:    clawbridge.Peer{Kind: "direct", ID: "demo-user"},
 		Content: "ping",
 	}
-	if demoIn.Channel == "" {
+	if demoIn.ClientID == "" {
 		slog.Error("no enabled client in config")
 		os.Exit(1)
 	}
@@ -96,8 +96,8 @@ func main() {
 
 	// 演示主动出站（非 Reply）
 	_ = b.Bus().PublishOutbound(ctx, &clawbridge.OutboundMessage{
-		ClientID: demoIn.Channel,
-		To:       clawbridge.Recipient{ChatID: demoIn.ChatID, Kind: demoIn.Peer.Kind},
+		ClientID: demoIn.ClientID,
+		To:       clawbridge.Recipient{SessionID: demoIn.SessionID, Kind: demoIn.Peer.Kind},
 		Text:     "主动一条（noop 会吞掉，不连外网）",
 	})
 
@@ -125,8 +125,8 @@ func runHost(ctx context.Context, b *clawbridge.Bridge) {
 			return
 		}
 		slog.Info("inbound",
-			"channel", in.Channel,
-			"chat", in.ChatID,
+			"client_id", in.ClientID,
+			"session_id", in.SessionID,
 			"from", in.Sender.DisplayName,
 			"text", in.Content,
 		)

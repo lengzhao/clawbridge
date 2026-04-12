@@ -9,26 +9,26 @@ import (
 	"github.com/lengzhao/clawbridge/config"
 )
 
-func TestParseSlackChatID(t *testing.T) {
+func TestParseSlackSessionID(t *testing.T) {
 	tests := []struct {
 		name       string
-		chatID     string
+		sessionID  string
 		wantChanID string
 		wantThread string
 	}{
-		{name: "channel only", chatID: "C123456", wantChanID: "C123456", wantThread: ""},
-		{name: "channel with thread", chatID: "C123456/1234567890.123456", wantChanID: "C123456", wantThread: "1234567890.123456"},
-		{name: "DM channel", chatID: "D987654", wantChanID: "D987654", wantThread: ""},
-		{name: "empty string", chatID: "", wantChanID: "", wantThread: ""},
+		{name: "channel only", sessionID: "C123456", wantChanID: "C123456", wantThread: ""},
+		{name: "channel with thread", sessionID: "C123456/1234567890.123456", wantChanID: "C123456", wantThread: "1234567890.123456"},
+		{name: "DM channel", sessionID: "D987654", wantChanID: "D987654", wantThread: ""},
+		{name: "empty string", sessionID: "", wantChanID: "", wantThread: ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			chanID, threadTS := parseSlackChatID(tt.chatID)
+			chanID, threadTS := parseSlackSessionID(tt.sessionID)
 			if chanID != tt.wantChanID {
-				t.Errorf("parseSlackChatID(%q) channelID = %q, want %q", tt.chatID, chanID, tt.wantChanID)
+				t.Errorf("parseSlackSessionID(%q) channelID = %q, want %q", tt.sessionID, chanID, tt.wantChanID)
 			}
 			if threadTS != tt.wantThread {
-				t.Errorf("parseSlackChatID(%q) threadTS = %q, want %q", tt.chatID, threadTS, tt.wantThread)
+				t.Errorf("parseSlackSessionID(%q) threadTS = %q, want %q", tt.sessionID, threadTS, tt.wantThread)
 			}
 		})
 	}

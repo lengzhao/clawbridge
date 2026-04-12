@@ -441,8 +441,8 @@ func (d *driver) handleUpload(w http.ResponseWriter, r *http.Request) {
 	d.broadcastSSE(ev)
 
 	in := &bus.InboundMessage{
-		Channel:    d.id,
-		ChatID:     chatID,
+		ClientID:   d.id,
+		SessionID:  chatID,
 		MessageID:  msgID,
 		ReceivedAt: time.Now().Unix(),
 		Sender: bus.SenderInfo{
@@ -501,8 +501,8 @@ func (d *driver) handleSend(w http.ResponseWriter, r *http.Request) {
 	d.broadcastSSE(ev)
 
 	in := &bus.InboundMessage{
-		Channel:    d.id,
-		ChatID:     chatID,
+		ClientID:   d.id,
+		SessionID:  chatID,
 		MessageID:  msgID,
 		ReceivedAt: time.Now().Unix(),
 		Sender: bus.SenderInfo{
@@ -601,7 +601,7 @@ func (d *driver) Send(ctx context.Context, msg *bus.OutboundMessage) (string, er
 	if text == "" && len(msg.Parts) == 0 {
 		return "", nil
 	}
-	chatID := strings.TrimSpace(msg.To.ChatID)
+	chatID := strings.TrimSpace(msg.To.SessionID)
 	if chatID == "" {
 		return "", nil
 	}
@@ -638,7 +638,7 @@ func (d *driver) UpdateStatus(ctx context.Context, req *bus.UpdateStatusRequest)
 	if req == nil {
 		return errors.New("webchat: nil UpdateStatusRequest")
 	}
-	chatID := strings.TrimSpace(req.To.ChatID)
+	chatID := strings.TrimSpace(req.To.SessionID)
 	if chatID == "" {
 		return nil
 	}
@@ -658,7 +658,7 @@ func (d *driver) EditMessage(ctx context.Context, req *bus.EditMessageRequest) e
 	if req == nil {
 		return errors.New("webchat: nil EditMessageRequest")
 	}
-	chatID := strings.TrimSpace(req.To.ChatID)
+	chatID := strings.TrimSpace(req.To.SessionID)
 	if chatID == "" {
 		return nil
 	}

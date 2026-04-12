@@ -323,8 +323,8 @@ func (d *driver) handleInboundMessage(ctx context.Context, msg WeixinMessage) {
 
 func (d *driver) publishInbound(ctx context.Context, chatID, messageID, content string, mediaPaths []string, sender bus.SenderInfo, metadata map[string]string) {
 	in := &bus.InboundMessage{
-		Channel:    d.id,
-		ChatID:     chatID,
+		ClientID:   d.id,
+		SessionID:  chatID,
 		MessageID:  messageID,
 		Sender:     sender,
 		Peer:       bus.Peer{Kind: "direct", ID: chatID},
@@ -349,7 +349,7 @@ func (d *driver) Send(ctx context.Context, msg *bus.OutboundMessage) (string, er
 		return "", err
 	}
 
-	toUserID := strings.TrimSpace(msg.To.ChatID)
+	toUserID := strings.TrimSpace(msg.To.SessionID)
 	if toUserID == "" {
 		return "", nil
 	}

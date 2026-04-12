@@ -153,8 +153,8 @@ func (b *Bridge) Reply(ctx context.Context, in *InboundMessage, text, mediaPath 
 		return ErrInvalidMessage
 	}
 	msg := &OutboundMessage{
-		ClientID:  in.Channel,
-		To:        Recipient{ChatID: in.ChatID, Kind: in.Peer.Kind},
+		ClientID:  in.ClientID,
+		To:        Recipient{SessionID: in.SessionID, Kind: in.Peer.Kind},
 		Text:      text,
 		ReplyToID: in.MessageID,
 	}

@@ -35,7 +35,7 @@ func TestBridgeNoopOutboundAndNoEditOrStatus(t *testing.T) {
 
 	if err := b.Bus().PublishOutbound(ctx, &bus.OutboundMessage{
 		ClientID: "a",
-		To:       bus.Recipient{ChatID: "room1"},
+		To:       bus.Recipient{SessionID: "room1"},
 		Text:     "hello",
 	}); err != nil {
 		t.Fatal(err)
@@ -43,7 +43,7 @@ func TestBridgeNoopOutboundAndNoEditOrStatus(t *testing.T) {
 
 	editErr := b.EditMessage(ctx, &clawbridge.EditMessageRequest{
 		ClientID: "a",
-		To:       bus.Recipient{ChatID: "room1"},
+		To:       bus.Recipient{SessionID: "room1"},
 		Text:     "edited",
 	})
 	if !errors.Is(editErr, clawbridge.ErrCapabilityUnsupported) {
@@ -52,7 +52,7 @@ func TestBridgeNoopOutboundAndNoEditOrStatus(t *testing.T) {
 
 	stErr := b.UpdateStatus(ctx, &clawbridge.UpdateStatusRequest{
 		ClientID:  "a",
-		To:        bus.Recipient{ChatID: "room1"},
+		To:        bus.Recipient{SessionID: "room1"},
 		MessageID: "m1",
 		State:     clawbridge.StatusProcessing,
 	})
@@ -67,7 +67,7 @@ func TestManagerUnknownClientUpdateStatus(t *testing.T) {
 	m := client.NewManager(mb, nil)
 	err := m.UpdateStatus(ctx, &bus.UpdateStatusRequest{
 		ClientID:  "x",
-		To:        bus.Recipient{ChatID: "c"},
+		To:        bus.Recipient{SessionID: "c"},
 		MessageID: "m",
 		State:     bus.StatusCompleted,
 	})
@@ -82,7 +82,7 @@ func TestEditMessageUnknownClient(t *testing.T) {
 	m := client.NewManager(mb, nil)
 	err := m.EditMessage(ctx, &bus.EditMessageRequest{
 		ClientID: "nope",
-		To:       bus.Recipient{ChatID: "c"},
+		To:       bus.Recipient{SessionID: "c"},
 		Text:     "x",
 	})
 	if err == nil {

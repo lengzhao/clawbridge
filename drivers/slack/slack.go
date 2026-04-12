@@ -147,12 +147,12 @@ func (d *driver) Send(ctx context.Context, msg *bus.OutboundMessage) (string, er
 	if !d.run.Load() {
 		return "", errNotRunning
 	}
-	channelID, threadTS := parseSlackChatID(msg.To.ChatID)
+	channelID, threadTS := parseSlackSessionID(msg.To.SessionID)
 	if msg.ThreadID != "" {
 		threadTS = msg.ThreadID
 	}
 	if channelID == "" {
-		return "", fmt.Errorf("slack: empty channel in chat_id: %w", errTemporary)
+		return "", fmt.Errorf("slack: empty channel in session_id: %w", errTemporary)
 	}
 
 	var lastTS string
@@ -171,7 +171,7 @@ func (d *driver) Send(ctx context.Context, msg *bus.OutboundMessage) (string, er
 		}
 		lastTS = ts
 
-		if ref, ok := d.pendingAcks.LoadAndDelete(msg.To.ChatID); ok {
+		if ref, ok := d.pendingAcks.LoadAndDelete(msg.To.SessionID); ok {
 			msgRef := ref.(slackMessageRef)
 			_ = d.api.AddReaction("white_check_mark", slack.ItemRef{
 				Channel:   msgRef.ChannelID,
@@ -364,7 +364,7 @@ func (d *driver) handleMessageEvent(ctx context.Context, ev *slackevents.Message
 		peerID = senderID
 	}
 
-	d.publishInbound(ctx, chatID, messageTS, senderID, content, mediaPaths, sender, bus.Peer{Kind: peerKind, ID: peerID}, map[string]string{
+	d.publishInbound(ctx, chatID, messageTS, content, mediaPaths, sender, bus.Peer{Kind: peerKind, ID: peerID}, map[string]string{
 		"message_ts": messageTS,
 		"channel_id": channelID,
 		"thread_ts":  threadTS,
@@ -419,7 +419,7 @@ func (d *driver) handleAppMention(ctx context.Context, ev *slackevents.AppMentio
 		mentionPeerID = senderID
 	}
 
-	d.publishInbound(ctx, chatID, messageTS, senderID, content, nil, sender, bus.Peer{Kind: mentionPeerKind, ID: mentionPeerID}, map[string]string{
+	d.publishInbound(ctx, chatID, messageTS, content, nil, sender, bus.Peer{Kind: mentionPeerKind, ID: mentionPeerID}, map[string]string{
 		"message_ts": messageTS,
 		"channel_id": channelID,
 		"thread_ts":  threadTS,
@@ -449,7 +449,6 @@ func (d *driver) handleSlashCommand(ctx context.Context, event socketmode.Event)
 		return
 	}
 
-	senderID := cmd.UserID
 	channelID := cmd.ChannelID
 	chatID := channelID
 	content := cmd.Text
@@ -457,7 +456,7 @@ func (d *driver) handleSlashCommand(ctx context.Context, event socketmode.Event)
 		content = "help"
 	}
 
-	d.publishInbound(ctx, chatID, "", senderID, content, nil, cmdSender, bus.Peer{Kind: "channel", ID: channelID}, map[string]string{
+	d.publishInbound(ctx, chatID, "", content, nil, cmdSender, bus.Peer{Kind: "channel", ID: channelID}, map[string]string{
 		"channel_id": channelID,
 		"platform":   "slack",
 		"is_command": "true",
@@ -466,10 +465,10 @@ func (d *driver) handleSlashCommand(ctx context.Context, event socketmode.Event)
 	})
 }
 
-func (d *driver) publishInbound(ctx context.Context, chatID, messageTS, senderID, content string, mediaPaths []string, sender bus.SenderInfo, peer bus.Peer, metadata map[string]string) {
+func (d *driver) publishInbound(ctx context.Context, chatID, messageTS, content string, mediaPaths []string, sender bus.SenderInfo, peer bus.Peer, metadata map[string]string) {
 	in := &bus.InboundMessage{
-		Channel:    d.id,
-		ChatID:     chatID,
+		ClientID:   d.id,
+		SessionID:  chatID,
 		MessageID:  messageTS,
 		Sender:     sender,
 		Peer:       peer,
@@ -537,8 +536,8 @@ func (d *driver) stripBotMention(text string) string {
 	return strings.TrimSpace(text)
 }
 
-func parseSlackChatID(chatID string) (channelID, threadTS string) {
-	parts := strings.SplitN(chatID, "/", 2)
+func parseSlackSessionID(sessionID string) (channelID, threadTS string) {
+	parts := strings.SplitN(sessionID, "/", 2)
 	channelID = parts[0]
 	if len(parts) > 1 {
 		threadTS = parts[1]

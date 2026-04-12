@@ -12,7 +12,7 @@
 | 核心接口 | `Channel`：含 `Send` 返回 `[]string`、`IsRunning`、`IsAllowed` 等 | `Driver`：仅 `Name`、`Start`、`Stop`、`Send` |
 | 配置 | 嵌在全局 `config.Config` 的各通道大块（如 `Channels.Telegram`） | 每条客户端一行 `ClientConfig` + **`options` map** |
 | 入站 | `BaseChannel.HandleMessage` → `bus.PublishInbound`（PicoClaw 的 `bus.InboundMessage`） | 自行组 **`github.com/lengzhao/clawbridge/bus.InboundMessage`** → `deps.Bus.PublishInbound` |
-| 出站文本 | `Send(ctx, bus.OutboundMessage)`，`Content` + `ChatID` | `Send(ctx, *bus.OutboundMessage)`：`Text` + **`To.ChatID`**，且 **`msg.ClientID`** 由宿主填写 |
+| 出站文本 | `Send(ctx, bus.OutboundMessage)`，`Content` + `ChatID` | `Send(ctx, *bus.OutboundMessage)`：`Text` + **`To.SessionID`**，且 **`msg.ClientID`** 由宿主填写 |
 | 出站媒体 | 常走 **`OutboundMediaMessage`** + `MediaPart.Ref`（`media://…`）+ **`MediaStore.Resolve`** | **同一 `OutboundMessage`** 里 **`Parts []MediaPart`**，`Path` 为 **Locator**（本地路径 / `s3://` / …），用 **`deps.Media.Open`** 读流上传 |
 | 入站媒体 | `MediaStore.Store` 得到 `media://` 引用，填入 `InboundMessage.Media` | **`MediaPaths []string`**，每条为 Locator；下载后 **`deps.Media.Put(ctx, scope, name, r, size, ct)`** |
 | 生命周期 | `Manager` 注入 `PlaceholderRecorder`、`MediaStore` 等 | **`client.Manager`** 只注入 **`Deps{Bus, Media}`**；无 Placeholder/Typing 注入 |
@@ -59,7 +59,7 @@ _ "github.com/lengzhao/clawbridge/drivers/<name>"
 func New(ctx context.Context, cfg config.ClientConfig, deps client.Deps) (client.Driver, error)
 ```
 
-- **`cfg.ID`**：实例唯一 id，应写入入站 **`InboundMessage.Channel`**（与 `OutboundMessage.ClientID` 对应），也用于日志与媒体 **`Put` 的 scope** 分段。
+- **`cfg.ID`**：实例唯一 id，应写入入站 **`InboundMessage.ClientID`**（与 `OutboundMessage.ClientID` 对应），也用于日志与媒体 **`Put` 的 scope** 分段。
 - **`cfg.Options`**：把原 `config.Channels.XXX` 的字段平铺或嵌套进 YAML/JSON 解码后的 map；用辅助函数读 `string` / `bool` / `[]string`（可参考 `drivers/feishu/creds.go`）。
 - **`deps.Bus`**：`*bus.MessageBus`，入站 **`PublishInbound`**。
 - **`deps.Media`**：`media.Backend`，入站 **`Put`**、出站 **`Open`**。
@@ -74,8 +74,8 @@ PicoClaw 入站常见字段 → clawbridge：
 
 | PicoClaw | clawbridge |
 |----------|------------|
-| `Channel`（通道名如 `telegram`） | 建议填 **`cfg.ID`**（多实例不冲突） |
-| `ChatID` | `ChatID` |
+| `Channel`（PicoClaw 通道名） | 建议填 **`cfg.ID`** → clawbridge **`InboundMessage.ClientID`**（多实例不冲突） |
+| `ChatID` | **`InboundMessage.SessionID`**（各 Driver 按需编码；可与原 `ChatID` 同值或组合串） |
 | `MessageID` | `MessageID` |
 | `Content` | `Content` |
 | `Media`（`media://`） | **`MediaPaths`**（Locator 字符串） |
@@ -92,12 +92,12 @@ PicoClaw 入站常见字段 → clawbridge：
 
 `bus.PublishOutbound` 会校验（见 `bus/bus.go`）：
 
-- `ClientID`、`To.ChatID` 非空；
+- `ClientID`、`To.SessionID` 非空；
 - `Text` 与 `Parts` 至少一个非空；每个 `Part.Path` 非空。
 
 实现 **`Send`** 时：
 
-- 会话 id 使用 **`msg.To.ChatID`**（及按需 **`msg.To.UserID`** / **`msg.To.Kind`**）。
+- 会话路由键使用 **`msg.To.SessionID`**（及按需 **`msg.To.UserID`** / **`msg.To.Kind`**）；Driver 负责解析为平台 API 所需参数。
 - 回复线程使用 **`msg.ReplyToID`** / **`msg.ThreadID`**（若平台支持）。
 - 媒体：对每个 **`msg.Parts`**，`deps.Media.Open(ctx, part.Path)`，读流上传到 IM；文件名/MIME 可用 **`Filename`** / **`ContentType`** 提示。
 
@@ -109,7 +109,7 @@ PicoClaw 入站常见字段 → clawbridge：
 |------|----------|------------|
 | 入站保存 | 下载 → 写盘 → `Store` → `media://ref` | 下载 → **`Backend.Put(ctx, scope, name, r, size, ct)`** → 返回 **路径等 Locator** → 填入 **`MediaPaths`** |
 | 出站读取 | `Resolve(ref)` 得本地路径 | **`Backend.Open(ctx, loc)`** |
-| scope | `BuildMediaScope(channel, chatID, msgID)` | 自订字符串即可（如 **`clientID/chatID/messageID`**），只要 **`RemoveScope`** 时能对应清理 |
+| scope | `BuildMediaScope(channel, chatID, msgID)` | 自订字符串即可（如 **`clientID/sessionID/messageID`**），只要 **`RemoveScope`** 时能对应清理 |
 
 若需 **`RemoveScope`**，使用与 **`Put` 相同的 scope 字符串**（本地 Backend 会按 scope 记录文件）。
 
@@ -148,7 +148,7 @@ PicoClaw 使用 **`channels.ErrTemporary`**、**`ErrRateLimit`** 等供 Manager 
 
 - [ ] `init.go` 中 **`RegisterDriver`** 名称与 YAML **`driver:`** 一致  
 - [ ] 仅依赖 **`github.com/lengzhao/clawbridge/...`**（避免 picoclaw `bus` / `channels` 类型混入）  
-- [ ] 入站 **`Channel` == `cfg.ID`**（多实例）  
+- [ ] 入站 **`ClientID` == `cfg.ID`**（多实例）  
 - [ ] 媒体走 **`deps.Media.Put` / `Open`**，消息里只存 **Locator 字符串**  
 - [ ] **`Start`/`Stop`** 释放 goroutine、HTTP server、长连接  
 - [ ] **`drivers/drivers.go`** 已空导入新包  

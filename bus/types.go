@@ -17,8 +17,8 @@ type SenderInfo struct {
 
 // InboundMessage is produced by drivers and consumed by the host.
 type InboundMessage struct {
-	Channel    string            `json:"channel"`
-	ChatID     string            `json:"chat_id"`
+	ClientID   string            `json:"client_id"`            // = ClientConfig.ID
+	SessionID  string            `json:"session_id"`           // driver-defined stable session key (opaque to host)
 	MessageID  string            `json:"message_id,omitempty"`
 	Sender     SenderInfo        `json:"sender"`
 	Peer       Peer              `json:"peer"`
@@ -30,9 +30,9 @@ type InboundMessage struct {
 
 // Recipient is the outbound delivery target.
 type Recipient struct {
-	ChatID string `json:"chat_id"`
-	UserID string `json:"user_id,omitempty"`
-	Kind   string `json:"kind,omitempty"`
+	SessionID string `json:"session_id"`
+	UserID    string `json:"user_id,omitempty"`
+	Kind      string `json:"kind,omitempty"`
 }
 
 // MediaPart is one attachment; Path is a Media Locator.
@@ -81,7 +81,7 @@ type EditMessageRequest struct {
 	Metadata  map[string]string `json:"metadata,omitempty"`
 }
 
-// RecipientKey is a stable compound key for (ChatID, Kind, UserID), used for last-sent tracking.
+// RecipientKey is a stable compound key for (SessionID, Kind, UserID), used for last-sent tracking.
 func RecipientKey(to Recipient) string {
-	return to.ChatID + "\x00" + to.Kind + "\x00" + to.UserID
+	return to.SessionID + "\x00" + to.Kind + "\x00" + to.UserID
 }

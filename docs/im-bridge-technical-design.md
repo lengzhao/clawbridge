@@ -110,7 +110,7 @@ clients:
       path: /
 ```
 
-- **`id`**：贯穿日志、`InboundMessage.Channel`、临时文件 **scope**（用于按会话/消息批量清理），支持多账号并存。
+- **`id`**：贯穿日志、`InboundMessage.ClientID`（= `OutboundMessage.ClientID`）、临时文件 **scope**（用于按会话/消息批量清理），支持多账号并存。
 - **`driver`** → 注册表查找构造函数（对齐 PicoClaw `RegisterFactory` 模式）。
 - **HTTP 监听**（如 `webchat`、未来 webhook 类 driver）：由 **各 Driver 文档**在 **`options` 内**约定字段（例如 webchat 的 `listen` / `path`）；**clawbridge 不在 Manager 层**把多个 client 挂到**同一个**监听端口的 mux 上。若需单端口多路径，由宿主写自己的 `http.Server`，在路由里分发给各 Driver 提供的 `Handler`（若该 Driver 暴露）或反向代理。
 
@@ -118,19 +118,19 @@ clients:
 
 **Inbound 与 Outbound 的分工**
 
-- **Inbound**：描述「谁从哪来」——`Sender`、`Peer`、`ChatID` 等反映 **来源会话**；宿主若要 **仅回复本条**，可从 Inbound 推导默认 `To`，但 **推送到别处** 时仍须显式填 `OutboundMessage.To`。
+- **Inbound**：描述「谁从哪来」——`Sender`、`Peer`、`SessionID` 等反映 **来源会话**；宿主若要 **仅回复本条**，可从 Inbound 推导默认 `To`，但 **推送到别处** 时仍须显式填 `OutboundMessage.To`。
 - **Outbound**：描述「发到哪去」——**不依赖**「必须与上一条 Inbound 同源」；`To` 一律由宿主（或策略层）给出。
 
 **统一领域模型**（可与 PicoClaw 对齐，便于 Adapter 对接或转换）：
 
-- **Inbound**：`Channel`（client id）、`Peer`、`Sender`、`ChatID`、`MessageID`、`Content`、**`MediaPaths []string`**（每个元素为 **Media Locator**：默认由 Driver 经 **`media.Put`** 得到 **本地路径**，或配置对象存储时得到 **`s3://bucket/key`**；空则无异步媒体）、`Metadata`。
+- **Inbound**：`ClientID`（= `ClientConfig.ID`）、`SessionID`（Driver 定义的稳定会话键，宿主视为不透明）、`Peer`、`Sender`、`MessageID`、`Content`、**`MediaPaths []string`**（每个元素为 **Media Locator**：默认由 Driver 经 **`media.Put`** 得到 **本地路径**，或配置对象存储时得到 **`s3://bucket/key`**；空则无异步媒体）、`Metadata`。
 - **Outbound（单一结构，不拆通道）**：一条消息可同时包含 **可选正文** 与 **零或多段媒体**；每段 **`MediaPart.Path`** 同为 **Locator**（宿主填 **本地路径** 或 **`s3://...` / 预签名 URL**，与入站约定一致）；可选 `Caption`、`Filename`、`ContentType`。长文 split 仍可作为 **Manager 侧可选策略**。
 
 **出站寻址：显式指定收件方，而非「只能回复当前会话」**：
 
 - **必须**携带 **发送目标**（由宿主填写），例如：
   - `ClientID`：从哪个已配置的 IM 实例发出；
-  - **`To`（收件人/会话描述）**：至少包含平台可识别的 **会话维度**（如 `ChatID` / `OpenChatID` / `RoomID`）；若平台支持「发到指定用户」且与会话 ID 不同，则同时填 **`UserID` / `OpenID`** 等（具体字段名由 Driver 文档约定，可收拢在 `Recipient` 结构体中）；
+  - **`To`（收件人/会话描述）**：至少包含 **`SessionID`**（各 Driver 将平台 `OpenChatID` / `RoomID` / 组合串等编码为稳定字符串）；若平台支持「发到指定用户」且与会话键不同，则同时填 **`UserID` / `OpenID`** 等（具体由 Driver 文档约定，收拢在 `Recipient`）；
   - **`Peer.Kind`**（如 `direct` / `group` / `channel`）：帮助 Driver 选择 API（群 @、私聊、频道帖文等）。
 - **`ReplyToMessageID` / `ThreadID` 等**：**可选**，仅用于 UI 串楼、线程回复；**不能**作为唯一寻址手段——即允许 **主动推送到任意已授权目标**（在策略允许的前提下），与「仅回 inbound 同源」解耦。
 
@@ -143,9 +143,9 @@ clients:
 
 ```go
 type Recipient struct {
-    ChatID   string // 会话/群/频道 ID（平台原生）
-    UserID   string // 可选：私聊对象或 @ 对象，依平台而定
-    Kind     string // direct | group | channel | ""
+    SessionID string // Driver 定义的会话路由键（可与平台原生 id 相同或为组合串）
+    UserID    string // 可选：私聊对象或 @ 对象，依平台而定
+    Kind      string // direct | group | channel | ""
 }
 
 // Path = Media Locator：本地路径 | s3://bucket/key | https://...

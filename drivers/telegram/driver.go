@@ -171,9 +171,9 @@ func (d *driver) Send(ctx context.Context, msg *bus.OutboundMessage) (string, er
 		return "", errors.New("telegram: nil message")
 	}
 
-	chatID, threadID, err := parseTelegramChatID(msg.To.ChatID)
+	chatID, threadID, err := parseTelegramSessionID(msg.To.SessionID)
 	if err != nil {
-		return "", fmt.Errorf("telegram: invalid chat_id: %w", client.ErrSendFailed)
+		return "", fmt.Errorf("telegram: invalid session_id: %w", client.ErrSendFailed)
 	}
 
 	replyToID := msg.ReplyToID
@@ -290,15 +290,15 @@ func (d *driver) EditMessage(ctx context.Context, req *bus.EditMessageRequest) e
 	if req == nil {
 		return errors.New("telegram: nil EditMessageRequest")
 	}
-	chatID := strings.TrimSpace(req.To.ChatID)
-	if chatID == "" {
+	sessionID := strings.TrimSpace(req.To.SessionID)
+	if sessionID == "" {
 		return nil
 	}
 	midStr := strings.TrimSpace(req.MessageID)
 	if midStr == "" {
 		return client.ErrCapabilityUnsupported
 	}
-	cid, _, err := parseTelegramChatID(chatID)
+	cid, _, err := parseTelegramSessionID(sessionID)
 	if err != nil {
 		return err
 	}
@@ -329,17 +329,17 @@ func (d *driver) EditMessage(ctx context.Context, req *bus.EditMessageRequest) e
 			return nil
 		}
 		if isPostConnectError(err) {
-			slog.Warn("telegram EditMessage: swallowing post-connect error", "chat_id", chatID, "mid", mid, "err", err)
+			slog.Warn("telegram EditMessage: swallowing post-connect error", "session_id", sessionID, "mid", mid, "err", err)
 			return nil
 		}
 	}
 	return err
 }
 
-func (d *driver) publishInbound(ctx context.Context, chatID, messageID, content string, mediaPaths []string, sender bus.SenderInfo, peer bus.Peer, metadata map[string]string) {
+func (d *driver) publishInbound(ctx context.Context, sessionID, messageID, content string, mediaPaths []string, sender bus.SenderInfo, peer bus.Peer, metadata map[string]string) {
 	in := &bus.InboundMessage{
-		Channel:    d.id,
-		ChatID:     chatID,
+		ClientID:   d.id,
+		SessionID:  sessionID,
 		MessageID:  messageID,
 		Sender:     sender,
 		Peer:       peer,
@@ -503,7 +503,7 @@ func (d *driver) handleMessage(ctx context.Context, message *telego.Message) err
 		compositeChatID = fmt.Sprintf("%d/%d", chatID, threadID)
 	}
 
-	slog.Debug("telegram inbound", "client_id", d.id, "sender", sender.CanonicalID, "chat_id", compositeChatID,
+	slog.Debug("telegram inbound", "client_id", d.id, "sender", sender.CanonicalID, "session_id", compositeChatID,
 		"preview", truncateRunes(content, 50))
 
 	peerKind := "direct"
@@ -679,7 +679,11 @@ func (d *driver) downloadFileWithInfo(ctx context.Context, file *telego.File, ex
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return ""
 	}
-	tmp, err := os.CreateTemp("", "tg-in-*")
+	pattern := "tg-in-*"
+	if ext != "" {
+		pattern = "tg-in-*" + ext
+	}
+	tmp, err := os.CreateTemp("", pattern)
 	if err != nil {
 		return ""
 	}
@@ -802,19 +806,19 @@ func parseContent(text string, useMarkdownV2 bool) string {
 	return markdownToTelegramHTML(text)
 }
 
-func parseTelegramChatID(chatID string) (int64, int, error) {
-	idx := strings.Index(chatID, "/")
+func parseTelegramSessionID(sessionID string) (int64, int, error) {
+	idx := strings.Index(sessionID, "/")
 	if idx == -1 {
-		cid, err := strconv.ParseInt(chatID, 10, 64)
+		cid, err := strconv.ParseInt(sessionID, 10, 64)
 		return cid, 0, err
 	}
-	cid, err := strconv.ParseInt(chatID[:idx], 10, 64)
+	cid, err := strconv.ParseInt(sessionID[:idx], 10, 64)
 	if err != nil {
 		return 0, 0, err
 	}
-	tid, err := strconv.Atoi(chatID[idx+1:])
+	tid, err := strconv.Atoi(sessionID[idx+1:])
 	if err != nil {
-		return 0, 0, fmt.Errorf("invalid thread ID in chat ID %q: %w", chatID, err)
+		return 0, 0, fmt.Errorf("invalid thread ID in session_id %q: %w", sessionID, err)
 	}
 	return cid, tid, nil
 }

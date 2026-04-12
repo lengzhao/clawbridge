@@ -71,7 +71,7 @@ func TestHandleOutboundSendSucceeds(t *testing.T) {
 	}
 	defer m.StopClients(ctx)
 
-	msg := &bus.OutboundMessage{ClientID: "x", To: bus.Recipient{ChatID: "c"}, Text: "hi"}
+	msg := &bus.OutboundMessage{ClientID: "x", To: bus.Recipient{SessionID: "c"}, Text: "hi"}
 	if err := m.HandleOutbound(ctx, msg); err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +94,7 @@ func TestHandleOutboundSendFails(t *testing.T) {
 	}
 	defer m.StopClients(ctx)
 
-	msg := &bus.OutboundMessage{ClientID: "x", To: bus.Recipient{ChatID: "c"}, Text: "hi"}
+	msg := &bus.OutboundMessage{ClientID: "x", To: bus.Recipient{SessionID: "c"}, Text: "hi"}
 	err = m.HandleOutbound(ctx, msg)
 	if err == nil {
 		t.Fatal("expected error")
@@ -130,7 +130,7 @@ func TestOutboundSendNotifyFailure(t *testing.T) {
 	}
 	defer m.StopClients(ctx)
 
-	msg := &bus.OutboundMessage{ClientID: "x", To: bus.Recipient{ChatID: "c"}, Text: "hi"}
+	msg := &bus.OutboundMessage{ClientID: "x", To: bus.Recipient{SessionID: "c"}, Text: "hi"}
 	_ = m.HandleOutbound(ctx, msg)
 	if got == nil {
 		t.Fatal("expected notify")
@@ -185,7 +185,7 @@ func TestOutboundSendNotifySuccessWithMessageID(t *testing.T) {
 	}
 	defer m.StopClients(ctx)
 
-	msg := &bus.OutboundMessage{ClientID: "x", To: bus.Recipient{ChatID: "c"}, Text: "hi"}
+	msg := &bus.OutboundMessage{ClientID: "x", To: bus.Recipient{SessionID: "c"}, Text: "hi"}
 	if err := m.HandleOutbound(ctx, msg); err != nil {
 		t.Fatal(err)
 	}
@@ -247,7 +247,7 @@ func TestOutboundSendNotifyRepublishOutbound(t *testing.T) {
 
 	go func() { _ = mb.RunOutboundDispatch(ctx, m.HandleOutbound) }()
 
-	msg := &bus.OutboundMessage{ClientID: "x", To: bus.Recipient{ChatID: "c"}, Text: "hi"}
+	msg := &bus.OutboundMessage{ClientID: "x", To: bus.Recipient{SessionID: "c"}, Text: "hi"}
 	if err := mb.PublishOutbound(ctx, msg); err != nil {
 		t.Fatal(err)
 	}

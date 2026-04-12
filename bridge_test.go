@@ -28,7 +28,7 @@ func TestNewStartStopNoop(t *testing.T) {
 
 	msg := &bus.OutboundMessage{
 		ClientID: "a",
-		To:       bus.Recipient{ChatID: "room1"},
+		To:       bus.Recipient{SessionID: "room1"},
 		Text:     "hi",
 	}
 	if err := b.Bus().PublishOutbound(ctx, msg); err != nil {
@@ -61,8 +61,8 @@ func TestInitReply(t *testing.T) {
 	defer func() { _ = clawbridge.Stop(context.Background()) }()
 
 	in := &clawbridge.InboundMessage{
-		Channel: "a",
-		ChatID:  "room1",
+		ClientID:  "a",
+		SessionID: "room1",
 		Sender:  clawbridge.SenderInfo{PlatformID: "u1"},
 		Peer:    clawbridge.Peer{Kind: "group"},
 	}

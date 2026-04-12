@@ -177,9 +177,9 @@ func (d *driver) Send(ctx context.Context, msg *bus.OutboundMessage) (string, er
 	if !d.run.Load() {
 		return "", errNotRunning
 	}
-	chatID := msg.To.ChatID
-	if chatID == "" {
-		return "", fmt.Errorf("feishu: empty chat_id: %w", errTemporary)
+	sessionID := msg.To.SessionID
+	if sessionID == "" {
+		return "", fmt.Errorf("feishu: empty session_id: %w", errTemporary)
 	}
 
 	if msg.Text != "" {
@@ -192,7 +192,7 @@ func (d *driver) Send(ctx context.Context, msg *bus.OutboundMessage) (string, er
 			errMsg := err.Error()
 			if strings.Contains(errMsg, "11310") {
 				slog.Warn("feishu: card send failed (table limit), falling back to text",
-					"client_id", d.id, "chat_id", chatID)
+					"client_id", d.id, "session_id", sessionID)
 				if err2 := d.sendText(ctx, msg.To, msg.Text); err2 != nil {
 					return "", err2
 				}
@@ -491,11 +491,11 @@ func (d *driver) handleMessageReceive(ctx context.Context, event *larkim.P2Messa
 		content = cleaned
 	}
 
-	slog.Info("feishu inbound", "client_id", d.id, "sender_id", senderID, "chat_id", chatID, "message_id", messageID)
+	slog.Info("feishu inbound", "client_id", d.id, "sender_id", senderID, "session_id", chatID, "message_id", messageID)
 
 	in := bus.InboundMessage{
-		Channel:    d.id,
-		ChatID:     chatID,
+		ClientID:   d.id,
+		SessionID:  chatID,
 		MessageID:  messageID,
 		Sender:     senderInfo,
 		Peer:       peer,
@@ -705,7 +705,7 @@ func appendMediaTags(content, messageType string, mediaRefs []string) string {
 }
 
 func (d *driver) sendCard(ctx context.Context, to bus.Recipient, cardContent string) error {
-	chatID := to.ChatID
+	chatID := to.SessionID
 	req := larkim.NewCreateMessageReqBuilder().
 		ReceiveIdType(larkim.ReceiveIdTypeChatId).
 		Body(larkim.NewCreateMessageReqBodyBuilder().
@@ -727,7 +727,7 @@ func (d *driver) sendCard(ctx context.Context, to bus.Recipient, cardContent str
 }
 
 func (d *driver) sendText(ctx context.Context, to bus.Recipient, text string) error {
-	chatID := to.ChatID
+	chatID := to.SessionID
 	content, _ := json.Marshal(map[string]string{"text": text})
 	req := larkim.NewCreateMessageReqBuilder().
 		ReceiveIdType(larkim.ReceiveIdTypeChatId).
@@ -749,7 +749,7 @@ func (d *driver) sendText(ctx context.Context, to bus.Recipient, text string) er
 }
 
 func (d *driver) sendImage(ctx context.Context, to bus.Recipient, file *os.File) error {
-	chatID := to.ChatID
+	chatID := to.SessionID
 	uploadReq := larkim.NewCreateImageReqBuilder().
 		Body(larkim.NewCreateImageReqBodyBuilder().
 			ImageType("message").
@@ -790,7 +790,7 @@ func (d *driver) sendImage(ctx context.Context, to bus.Recipient, file *os.File)
 }
 
 func (d *driver) sendFile(ctx context.Context, to bus.Recipient, file *os.File, filename, fileType string) error {
-	chatID := to.ChatID
+	chatID := to.SessionID
 	feishuFileType := "stream"
 	switch fileType {
 	case "audio":
