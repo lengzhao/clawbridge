@@ -602,10 +602,11 @@
         input.style.height = Math.min(input.scrollHeight, 200) + "px";
       });
       input.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && !e.shiftKey) {
-          e.preventDefault();
-          form.requestSubmit();
-        }
+        if (e.key !== "Enter" || e.shiftKey) return;
+        // 中文等 IME 组字/选词时用 Enter 上屏，不能当作「发送」
+        if (e.isComposing || e.keyCode === 229) return;
+        e.preventDefault();
+        form.requestSubmit();
       });
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
