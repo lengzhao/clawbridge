@@ -374,7 +374,14 @@
         const cid = ev.chat_id;
         if (!cid) return;
         if (!db.messages[cid]) db.messages[cid] = [];
-        const row = { t: ev.type, role: ev.role, id: ev.id, text: ev.text || "", files: Array.isArray(ev.files) ? ev.files : [] };
+        const row = {
+          t: ev.type,
+          role: ev.role,
+          id: ev.id,
+          text: ev.text || "",
+          files: Array.isArray(ev.files) ? ev.files : [],
+          sent_at: typeof ev.sent_at === "number" ? ev.sent_at : undefined,
+        };
         db.messages[cid].push(row);
         if (db.messages[cid].length > 500) {
           db.messages[cid] = db.messages[cid].slice(-500);
@@ -394,10 +401,19 @@
         clearMessages();
         statusEl.textContent = "";
         statusEl.className = "";
-        const arr = db.messages[cid] || [];
+        const arr0 = db.messages[cid] || [];
+        const sorted = arr0
+          .map((row, i) => ({ row, i }))
+          .sort((a, b) => {
+            const ta = typeof a.row.sent_at === "number" ? a.row.sent_at : 0;
+            const tb = typeof b.row.sent_at === "number" ? b.row.sent_at : 0;
+            if (ta !== tb) return ta - tb;
+            return a.i - b.i;
+          })
+          .map((x) => x.row);
         const textById = new Map();
         const order = [];
-        for (const row of arr) {
+        for (const row of sorted) {
           if (row.t === "message") {
             order.push(row.id);
             textById.set(row.id, { role: row.role, text: row.text || "", files: row.files || [] });

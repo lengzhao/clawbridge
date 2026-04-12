@@ -16,7 +16,6 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -33,6 +32,7 @@ var staticUI embed.FS
 
 const (
 	maxSSEClient   = 64
+	maxSSEChBuf    = 256
 	maxChatIDLen   = 256
 	maxUploadSize  = 32 << 20
 	mediaTicketTTL = 7 * 24 * time.Hour
@@ -54,6 +54,8 @@ type chatEvent struct {
 	Files     []webchatFileRef `json:"files,omitempty"`
 	MessageID string           `json:"message_id,omitempty"`
 	State     string           `json:"state,omitempty"`
+	// SentAt 为服务端生成该事件的 Unix 毫秒时间戳；供浏览器 localStorage 重放时排序，避免刷新后乱序。
+	SentAt int64 `json:"sent_at,omitempty"`
 }
 
 type driver struct {
@@ -409,8 +411,7 @@ func (d *driver) handleUpload(w http.ResponseWriter, r *http.Request) {
 		ct = "application/octet-stream"
 	}
 
-	n := d.inboundSeq.Add(1)
-	msgID := "in-" + strconv.FormatUint(n, 10)
+	msgID := d.webchatInboundID()
 	scope := d.id + ":" + chatID + ":" + msgID
 	loc, err := d.mediab.Put(r.Context(), scope, origName, fh, fileHdr.Size, ct)
 	if err != nil {
@@ -495,8 +496,7 @@ func (d *driver) handleSend(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"error":"empty content"}`))
 		return
 	}
-	n := d.inboundSeq.Add(1)
-	msgID := "in-" + strconv.FormatUint(n, 10)
+	msgID := d.webchatInboundID()
 	ev := chatEvent{Type: "message", Role: "user", ChatID: chatID, ID: msgID, Text: text}
 	d.broadcastSSE(ev)
 
@@ -542,7 +542,7 @@ func (d *driver) handleSSE(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "too many clients", http.StatusServiceUnavailable)
 		return
 	}
-	ch := make(chan []byte, 16)
+	ch := make(chan []byte, maxSSEChBuf)
 	d.sseSubs[ch] = struct{}{}
 	d.mu.Unlock()
 
@@ -577,6 +577,7 @@ func (d *driver) handleSSE(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *driver) broadcastSSE(ev chatEvent) {
+	ev.SentAt = time.Now().UnixMilli()
 	line, err := json.Marshal(ev)
 	if err != nil {
 		return
@@ -588,8 +589,20 @@ func (d *driver) broadcastSSE(ev chatEvent) {
 		select {
 		case ch <- payload:
 		default:
+			slog.Warn("webchat: sse client buffer full, event dropped", "client_id", d.id, "type", ev.Type)
 		}
 	}
+}
+
+// webchatMessageID 生成进程内唯一 ID；避免服务重启后仍用 in-1/out-1 与浏览器 localStorage 历史冲突导致重放乱序或去重丢消息。
+func (d *driver) webchatInboundID() string {
+	n := d.inboundSeq.Add(1)
+	return fmt.Sprintf("in-%d-%x", time.Now().UnixNano(), n)
+}
+
+func (d *driver) webchatOutboundID() string {
+	n := d.msgSeq.Add(1)
+	return fmt.Sprintf("out-%d-%x", time.Now().UnixNano(), n)
 }
 
 func (d *driver) Send(ctx context.Context, msg *bus.OutboundMessage) (string, error) {
@@ -605,8 +618,7 @@ func (d *driver) Send(ctx context.Context, msg *bus.OutboundMessage) (string, er
 	if chatID == "" {
 		return "", nil
 	}
-	n := d.msgSeq.Add(1)
-	outID := "out-" + strconv.FormatUint(n, 10)
+	outID := d.webchatOutboundID()
 	if text == "" && len(msg.Parts) > 0 {
 		text = "[附件] " + msg.Parts[0].Filename
 		if text == "[附件] " {

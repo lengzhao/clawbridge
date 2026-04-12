@@ -40,7 +40,7 @@ type ClientConfig struct {
 }
 ```
 
-需要 **HTTP 监听** 的 driver（例如 `webchat`）在 **`options` 内**约定字段（如 `listen`、`path`）。**webchat** 的会话列表与聊天记录由 **浏览器 localStorage** 持久化；服务端提供 `POST /api/send`、`POST /api/upload`、媒体下载与 **`GET /api/events`（SSE）**：默认 **单连接广播** 所有会话事件，每条事件带 `chat_id`（**浏览器侧会话 id**，与 bus 入站/出站的 **`SessionID` 同值**），由 **前端按会话分发**；不在服务端保存聊天内容。历史可选查询参数 `chat_id` 已忽略。
+需要 **HTTP 监听** 的 driver（例如 `webchat`）在 **`options` 内**约定字段（如 `listen`、`path`）。**webchat** 的会话列表与聊天记录由 **浏览器 localStorage** 持久化；服务端提供 `POST /api/send`、`POST /api/upload`、媒体下载与 **`GET /api/events`（SSE）**：默认 **单连接广播** 所有会话事件，每条事件带 `chat_id`（**浏览器侧会话 id**，与 bus 入站/出站的 **`SessionID` 同值**），由 **前端按会话分发**；不在服务端保存聊天内容。SSE 负载含 **`sent_at`**（Unix 毫秒）与进程内唯一的 **`id`**，供前端持久化后按时间重放，避免刷新后顺序错乱。历史可选查询参数 `chat_id` 已忽略。
 
 **配置片段示例（仅本地媒体）**：不写 `media` 或 `root` 留空时，使用 **`os.TempDir()/clawbridge`**。
 
