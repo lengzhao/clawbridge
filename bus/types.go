@@ -51,14 +51,28 @@ type OutboundMessage struct {
 	Parts     []MediaPart       `json:"parts,omitempty"`
 	ReplyToID string            `json:"reply_to_id,omitempty"`
 	ThreadID  string            `json:"thread_id,omitempty"`
+	// MessageID is the platform message id when referencing an existing message (e.g. EditMessage target).
+	// Send implementations ignore it; optional for PublishOutbound.
+	MessageID string            `json:"message_id,omitempty"`
 	Metadata  map[string]string `json:"metadata,omitempty"`
 }
 
-// Well-known values for UpdateStatusRequest.State (drivers may accept extension values).
+// Well-known string values for UpdateStatusRequest.State (drivers may accept extension values).
 const (
 	StatusProcessing = "processing"
 	StatusCompleted  = "completed"
 	StatusFailed     = "failed"
+)
+
+// UpdateStatusState is the message-level status for Bridge.UpdateStatus and similar helpers.
+// Use the UpdateStatus* constants; for driver-specific state strings, convert with UpdateStatusState("…").
+type UpdateStatusState string
+
+// Typed well-known states (wire value equals the string constants above).
+const (
+	UpdateStatusProcessing UpdateStatusState = StatusProcessing
+	UpdateStatusCompleted  UpdateStatusState = StatusCompleted
+	UpdateStatusFailed     UpdateStatusState = StatusFailed
 )
 
 // UpdateStatusRequest updates UI state for one existing message (message scope, not chat typing).

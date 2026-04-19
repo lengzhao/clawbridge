@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 
 	"github.com/lengzhao/clawbridge/bus"
@@ -137,20 +138,54 @@ func (b *Bridge) Bus() *bus.MessageBus {
 	return b.bus
 }
 
-// UpdateStatus updates per-message state when the target driver implements MessageStatusUpdater.
-func (b *Bridge) UpdateStatus(ctx context.Context, req *UpdateStatusRequest) error {
+// UpdateStatus updates per-message state for the given inbound message: ClientID, To, and
+// MessageID are taken from in (same routing as Reply). metadata may be nil.
+func (b *Bridge) UpdateStatus(ctx context.Context, in *InboundMessage, state UpdateStatusState, metadata map[string]string) error {
+	if in == nil || strings.TrimSpace(string(state)) == "" {
+		return ErrInvalidMessage
+	}
+	req := &UpdateStatusRequest{
+		ClientID:  in.ClientID,
+		To:        Recipient{SessionID: in.SessionID, Kind: in.Peer.Kind},
+		MessageID: in.MessageID,
+		State:     string(state),
+		Metadata:  metadata,
+	}
+	return b.mgr.UpdateStatus(ctx, req)
+}
+
+// UpdateStatusRequest updates per-message state with a fully specified request (e.g. when
+// MessageID is not the same as an InboundMessage.MessageID).
+func (b *Bridge) UpdateStatusRequest(ctx context.Context, req *UpdateStatusRequest) error {
 	return b.mgr.UpdateStatus(ctx, req)
 }
 
 // EditMessage edits a sent message when the target driver implements MessageEditor.
-func (b *Bridge) EditMessage(ctx context.Context, req *EditMessageRequest) error {
+// Fields are taken from out (same shape as PublishOutbound / Reply); MessageID empty means last Send for ClientID+To (§2.2.1).
+func (b *Bridge) EditMessage(ctx context.Context, out *OutboundMessage) error {
+	if out == nil {
+		return ErrInvalidMessage
+	}
+	req := &EditMessageRequest{
+		ClientID:  out.ClientID,
+		To:        out.To,
+		MessageID: out.MessageID,
+		Text:      out.Text,
+		Parts:     out.Parts,
+		Metadata:  out.Metadata,
+	}
 	return b.mgr.EditMessage(ctx, req)
 }
 
-// Reply sends a quick reply derived from an inbound message.
-func (b *Bridge) Reply(ctx context.Context, in *InboundMessage, text, mediaPath string) error {
+// EditMessageRequest edits using a fully specified request.
+func (b *Bridge) EditMessageRequest(ctx context.Context, req *EditMessageRequest) error {
+	return b.mgr.EditMessage(ctx, req)
+}
+
+// Reply sends a quick reply derived from an inbound message and returns the outbound message that was queued.
+func (b *Bridge) Reply(ctx context.Context, in *InboundMessage, text, mediaPath string) (*OutboundMessage, error) {
 	if in == nil || (text == "" && mediaPath == "") {
-		return ErrInvalidMessage
+		return nil, ErrInvalidMessage
 	}
 	msg := &OutboundMessage{
 		ClientID:  in.ClientID,
@@ -161,5 +196,8 @@ func (b *Bridge) Reply(ctx context.Context, in *InboundMessage, text, mediaPath 
 	if mediaPath != "" {
 		msg.Parts = []MediaPart{{Path: mediaPath}}
 	}
-	return b.bus.PublishOutbound(ctx, msg)
+	if err := b.bus.PublishOutbound(ctx, msg); err != nil {
+		return nil, err
+	}
+	return msg, nil
 }

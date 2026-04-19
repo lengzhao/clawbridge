@@ -163,6 +163,7 @@ type OutboundMessage struct {
     Parts         []MediaPart // 每段 Path 为 Locator
     ReplyToID     string      // 可选
     ThreadID      string      // 可选
+    MessageID     string      // 可选；引用已存在消息（如 Bridge.EditMessage）；Send 时 Driver 忽略
     Metadata      map[string]string
 }
 ```
@@ -170,13 +171,13 @@ type OutboundMessage struct {
 各 **Driver** 建议实现的最小接口集合：
 
 - `Start(ctx) / Stop(ctx)`
-- `Send(ctx, msg *OutboundMessage) error` — **统一入口**：对非空 `Parts[i].Path` 使用 **`media.Open(ctx, loc)`**（内部对 `file`/`s3`/`http(s)` 分流）或 **纯本地时直接 `os.Open`** 读流后上传；保证 **Locator 在进程内可读**（凭证由 `media` 后端配置）。
+- `Send(ctx, msg *OutboundMessage) (sentMessageID string, err error)` — **统一入口**：对非空 `Parts[i].Path` 使用 **`media.Open(ctx, loc)`**（内部对 `file`/`s3`/`http(s)` 分流）或 **纯本地时直接 `os.Open`** 读流后上传；保证 **Locator 在进程内可读**（凭证由 `media` 后端配置）。**忽略** `msg.MessageID`（该字段用于 `EditMessage` 等引用语义，见 public-api）。
 - 入站：向 Bus `PublishInbound` 或等价回调
 
 **可选接口（与 `Send` 分离，见 [public-api.md](./public-api.md) §2.1、§3.4）**：
 
-- **`MessageStatusUpdater`**：`UpdateStatus(ctx, *UpdateStatusRequest) error`。更新 **单条已存在消息** 的 UI 状态（**消息级**，例如「处理中 / 处理完成 / 处理异常」），**不是**会话级打字；请求中 **`MessageID` 必填**。
-- **`MessageEditor`**：`EditMessage(ctx, *EditMessageRequest) error`。编辑已发送内容；**不**通过 `OutboundMessage.Metadata` 伪装成发送。若 **`MessageID` 为空**，约定为 **该 `ClientID` + `To` 下最近一次成功 `Send` 的消息**（细则见 public-api §2.2.1）。
+- **`MessageStatusUpdater`**：`UpdateStatus(ctx, *UpdateStatusRequest) error`。更新 **单条已存在消息** 的 UI 状态（**消息级**，例如「处理中 / 处理完成 / 处理异常」），**不是**会话级打字；请求中 **`MessageID` 必填**。宿主侧可使用根包 **`UpdateStatus(ctx, in, state, metadata)`**，由入站消息推导 `ClientID`/`To`/`MessageID`（见 public-api §1.3）。
+- **`MessageEditor`**：`EditMessage(ctx, *EditMessageRequest) error`。编辑已发送内容；**不**通过 `OutboundMessage.Metadata` 伪装成发送。若 **`MessageID` 为空**，约定为 **该 `ClientID` + `To` 下最近一次成功 `Send` 的消息**（细则见 public-api §2.2.1）。根包 / `Bridge` 对外提供 **`EditMessage(ctx, *OutboundMessage)`**，将 `OutboundMessage`（含可选 `message_id`）映射为上述请求。
 
 占位符、卡片内部多步刷新等仍属 **Driver 实现细节**，不必暴露为上述接口。
 

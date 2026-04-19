@@ -2,6 +2,7 @@ package clawbridge_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -66,7 +67,14 @@ func TestInitReply(t *testing.T) {
 		Sender:  clawbridge.SenderInfo{PlatformID: "u1"},
 		Peer:    clawbridge.Peer{Kind: "group"},
 	}
-	if err := clawbridge.Reply(ctx, in, "ok", ""); err != nil {
+	if _, err := clawbridge.Reply(ctx, in, "ok", ""); err != nil {
 		t.Fatal(err)
+	}
+
+	if err := clawbridge.UpdateStatus(ctx, nil, clawbridge.UpdateStatusProcessing, nil); !errors.Is(err, clawbridge.ErrInvalidMessage) {
+		t.Fatalf("UpdateStatus nil in: want ErrInvalidMessage, got %v", err)
+	}
+	if err := clawbridge.UpdateStatus(ctx, in, "", nil); !errors.Is(err, clawbridge.ErrInvalidMessage) {
+		t.Fatalf("UpdateStatus empty state: want ErrInvalidMessage, got %v", err)
 	}
 }

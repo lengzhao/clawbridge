@@ -135,7 +135,7 @@ func runHost(ctx context.Context, b *clawbridge.Bridge) {
 		if len(in.MediaPaths) > 0 {
 			mediaPath = in.MediaPaths[0]
 		}
-		if err := b.Reply(ctx, &in, reply, mediaPath); err != nil {
+		if _, err := b.Reply(ctx, &in, reply, mediaPath); err != nil {
 			slog.Error("Reply", "err", err)
 		}
 	}

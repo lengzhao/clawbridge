@@ -81,14 +81,14 @@ clients:
         prefixes:
           - /ask
           - /bot
-      # 可选：Bridge.UpdateStatus 在原入站消息上添加表情回复（message-reaction）时的 emoji_type
+      # 可选：UpdateStatus（包级或 Bridge）在原入站消息上添加表情回复（message-reaction）时的 emoji_type
       # 默认 processing=OnIt、completed=DONE、failed=CrossMark；见开放平台「表情文案说明」
       # status_emoji_processing: OnIt
       # status_emoji_completed: DONE
       # status_emoji_failed: CrossMark
 ```
 
-宿主调用 `UpdateStatus` 时，可在 **`UpdateStatusRequest.Metadata`** 中用 **`feishu_status_emoji_processing` / `feishu_status_emoji_completed` / `feishu_status_emoji_failed`** 单次覆盖（优先级高于 `options` 与默认值）。状态切换时会先移除机器人此前为该消息添加的上一条状态表情，再添加新表情。应用需在开放平台开通 **添加/删除消息表情回复** 相关权限（如 `im:message.reaction.me:create` / `im:message.reaction.me:delete`）。
+宿主调用 **`UpdateStatus(ctx, in, state, metadata)`**（包级或 `*Bridge`）时，参数 **`metadata`** 会原样写入 **`UpdateStatusRequest.Metadata`**。飞书场景下可在其中使用 **`feishu_status_emoji_processing` / `feishu_status_emoji_completed` / `feishu_status_emoji_failed`** 单次覆盖（优先级高于 `options` 与默认值）。若使用底层 **`UpdateStatusRequest`**，上述键同样写在请求的 **`Metadata`** 字段。状态切换时会先移除机器人此前为该消息添加的上一条状态表情，再添加新表情。应用需在开放平台开通 **添加/删除消息表情回复** 相关权限（如 `im:message.reaction.me:create` / `im:message.reaction.me:delete`）。
 
 **Slack（`driver: slack`）配置示例**（[Socket Mode](https://api.slack.com/apis/connections/socket)；`options` 对应 `drivers/slack`）：
 
@@ -147,12 +147,14 @@ func (b *Bridge) Media() media.Backend
 // Bus 返回消息总线；宿主通过 ConsumeInbound / PublishOutbound 与库交互（见 §3）。
 func (b *Bridge) Bus() *bus.MessageBus
 
-// Reply 快捷回复入站会话：语义与 §1.3 包级 Reply 相同；包级 Reply 建议委托给 `Instance()` 得到的 Bridge 的此方法。
-func (b *Bridge) Reply(ctx context.Context, in *InboundMessage, text, mediaPath string) error
+// Reply 快捷回复入站会话：语义与 §1.3 包级 Reply 相同；成功时返回已组装的 *OutboundMessage（与入队内容一致）。
+func (b *Bridge) Reply(ctx context.Context, in *InboundMessage, text, mediaPath string) (*OutboundMessage, error)
 
-// UpdateStatus / EditMessage 委托给内部 Manager：仅当对应 Driver 实现可选接口时成功；否则返回 ErrCapabilityUnsupported（见 §3.4）。
-func (b *Bridge) UpdateStatus(ctx context.Context, req *UpdateStatusRequest) error
-func (b *Bridge) EditMessage(ctx context.Context, req *EditMessageRequest) error
+// UpdateStatus / UpdateStatusRequest / EditMessage 委托给内部 Manager：仅当对应 Driver 实现可选接口时成功；否则返回 ErrCapabilityUnsupported（见 §3.4）。
+func (b *Bridge) UpdateStatus(ctx context.Context, in *InboundMessage, state UpdateStatusState, metadata map[string]string) error
+func (b *Bridge) UpdateStatusRequest(ctx context.Context, req *UpdateStatusRequest) error
+func (b *Bridge) EditMessage(ctx context.Context, out *OutboundMessage) error
+func (b *Bridge) EditMessageRequest(ctx context.Context, req *EditMessageRequest) error
 ```
 
 **错误语义**：`New` 在配置非法、Driver 未知、内置 local `Media` 构造失败时返回错误；`Start` 在端口占用、鉴权失败等时返回错误。
@@ -181,6 +183,7 @@ type (
     Recipient             = bus.Recipient
     MediaPart             = bus.MediaPart
     UpdateStatusRequest   = bus.UpdateStatusRequest
+    UpdateStatusState     = bus.UpdateStatusState
     EditMessageRequest    = bus.EditMessageRequest
 )
 
@@ -203,20 +206,32 @@ func Start(ctx context.Context) error
 func Stop(ctx context.Context) error
 
 func PublishOutbound(ctx context.Context, msg *OutboundMessage) error
-func UpdateStatus(ctx context.Context, req *UpdateStatusRequest) error
-func EditMessage(ctx context.Context, req *EditMessageRequest) error
+func EditMessage(ctx context.Context, out *OutboundMessage) error
 func ConsumeInbound(ctx context.Context) (InboundMessage, error)
 
 // Reply 快捷回复当前入站会话：根据 in 填充 ClientID、To（SessionID / Kind）、ReplyToID（MessageID），再发 text 与可选单附件。
 // mediaPath 为空则不带 Parts；非空则 Parts = []MediaPart{{Path: mediaPath}}（Locator 约定同 §2.3）。
-// in == nil 或 text 与 mediaPath 均为空时返回 ErrInvalidMessage。
-func Reply(ctx context.Context, in *InboundMessage, text, mediaPath string) error
+// in == nil 或 text 与 mediaPath 均为空时返回 (nil, ErrInvalidMessage)；成功时返回已组装的 *OutboundMessage。
+func Reply(ctx context.Context, in *InboundMessage, text, mediaPath string) (*OutboundMessage, error)
+
+// UpdateStatus 快捷更新消息级状态：根据 in 填充 ClientID、To、MessageID（与 Reply 同源），再发 state 与可选 metadata。
+// state 使用类型 UpdateStatusState（如 UpdateStatusProcessing）；扩展取值可用 UpdateStatusState("…")。metadata 可为 nil；state 为空或 in == nil 时返回 ErrInvalidMessage。需自定义 MessageID 或完整路由时，使用 `*Bridge.UpdateStatusRequest`。
+func UpdateStatus(ctx context.Context, in *InboundMessage, state UpdateStatusState, metadata map[string]string) error
 
 // Media 委托给默认 Bridge.Media()；须在 Init 成功后使用。未初始化时返回 nil 或 panic 由实现 **固定一种** 并在发行说明写明。
 func Media() media.Backend
 ```
 
-**语义**：`PublishOutbound` / `ConsumeInbound` / `Media` / `Reply` 等价于 `Instance()` 取得默认 `*Bridge` 再委托其 `Bus()`（或内部等价路径）；`Reply` 本质是 **组装 `OutboundMessage` 后调用 `PublishOutbound`**。
+**语义**：`PublishOutbound` / `ConsumeInbound` / `Media` / `Reply` / `UpdateStatus` / `EditMessage` 等价于 `Instance()` 取得默认 `*Bridge` 再委托；`Reply` 本质是 **组装 `OutboundMessage` 后调用 `PublishOutbound`** 并返回该消息；`EditMessage` 从 `*OutboundMessage` 组装 `EditMessageRequest` 后委托 Manager；`UpdateStatus` 本质是 **组装 `UpdateStatusRequest` 后委托 Manager**。
+
+**Bridge / 包级「快捷方法」与底层请求对照**（需完整字段或自定义路由时用 `*Request` 系列）：
+
+| 快捷方法 | 入参要点 | 底层 |
+|----------|----------|------|
+| `Reply(ctx, in, text, mediaPath)` | 从入站推导 `ClientID`、`To`、`ReplyToID` | `PublishOutbound` |
+| `UpdateStatus(ctx, in, state, metadata)` | 从入站推导路由，`state` 为 `UpdateStatusState` | `UpdateStatusRequest` |
+| `EditMessage(ctx, out)` | `out` 为 `*OutboundMessage`，含待编辑正文/附件与可选 `message_id` | `EditMessageRequest` |
+| `UpdateStatusRequest` / `EditMessageRequest` | 显式构造 | 直接交给 Manager → Driver |
 
 **`Reply` 字段映射（实现约定）**：
 
@@ -229,6 +244,26 @@ func Media() media.Backend
 | `ReplyToID` | `in.MessageID` |
 | `Text` | 参数 `text` |
 | `Parts` | `mediaPath != ""` 时为单元素 `{Path: mediaPath}`，否则 `nil` |
+| `MessageID`（出站字段） | **不填**（`Send` 不需要）；若需引用已发送消息的 id，可在返回的 `*OutboundMessage` 上由 `OutboundSendNotify` 等异步填充后再用于 `EditMessage`） |
+
+**`EditMessage`（基于 `*OutboundMessage`）字段映射**：
+
+| `EditMessageRequest` 字段 | 来源 |
+|----------------------------|------|
+| `ClientID` / `To` / `Text` / `Parts` / `Metadata` | `out` 同名字段 |
+| `MessageID` | `out.MessageID`（空则 §2.2.1「最后一条发送」） |
+
+**`UpdateStatus` 字段映射（与 `Reply` 同源路由）**：
+
+| `UpdateStatusRequest` 字段 | 来源 |
+|----------------------------|------|
+| `ClientID` | `in.ClientID` |
+| `To.SessionID` | `in.SessionID` |
+| `To.Kind` | `in.Peer.Kind` |
+| `To.UserID` | 默认 **不填**（与 `Reply` 一致）；若平台要求，使用 `UpdateStatusRequest` 自行构造 |
+| `MessageID` | `in.MessageID` |
+| `State` | 参数 `state` 的字符串形式（`UpdateStatusState`，如 `UpdateStatusProcessing`） |
+| `Metadata` | 参数 `metadata`（可为 `nil`） |
 
 ---
 
@@ -292,6 +327,7 @@ type OutboundMessage struct {
     Parts     []MediaPart       `json:"parts,omitempty"`
     ReplyToID string            `json:"reply_to_id,omitempty"`
     ThreadID  string            `json:"thread_id,omitempty"`
+    MessageID string            `json:"message_id,omitempty"` // 引用已存在消息时（如 EditMessage）；Send 时 Driver 忽略
     Metadata  map[string]string `json:"metadata,omitempty"`
 }
 
@@ -330,7 +366,8 @@ type EditMessageRequest struct {
 | 消息 | 约束 |
 |------|------|
 | **Inbound** | `ClientID`、`SessionID`、`Sender`、`Peer` 应有值；`Content` 与 `MediaPaths` 可同时为空（如纯事件，实现可过滤）；`MediaPaths` 每项为 **Locator**。 |
-| **Outbound** | `ClientID`、`To.SessionID`（及平台要求的其它字段）**必填**；`Text` 与 `Parts` 至少其一非空（否则实现可返回 `ErrInvalidMessage`）；`ReplyToID` / `ThreadID` **可选**。 |
+| **Outbound**（`PublishOutbound` / `Send`） | `ClientID`、`To.SessionID`（及平台要求的其它字段）**必填**；`Text` 与 `Parts` 至少其一非空（否则实现可返回 `ErrInvalidMessage`）；`ReplyToID` / `ThreadID` **可选**；**`message_id` 在发送路径上由 Driver 忽略**（预留给引用/编辑场景，见下）。 |
+| **`EditMessage` 用的 `OutboundMessage`** | 与上表字段同源；**`message_id` 为空**时按 §2.2.1 解析为「最后一条成功 `Send`」；`Text`/`Parts` 是否允许全空由平台决定。 |
 | **UpdateStatusRequest** | `ClientID`、`To`、`MessageID`、`State` **必填**；`State` 为 §2.1 所列常量或 Driver 文档扩展值。 |
 | **EditMessageRequest** | `ClientID`、`To` **必填**；`MessageID` **可选**（空则 §2.2.1）；`Text` 与 `Parts` 是否允许全空由平台决定，实现可返回 `ErrInvalidMessage`。 |
 
@@ -436,9 +473,10 @@ go func() {
         in, err := clawbridge.ConsumeInbound(ctx)
         if err != nil { return }
         // 等价于下面手写 Outbound，仅回复文本、无附件时 mediaPath 传 ""
-        _ = clawbridge.Reply(ctx, &in, "pong", "")
+        if _, err := clawbridge.Reply(ctx, &in, "pong", ""); err != nil { return }
+        // 成功时返回 *OutboundMessage，可与 OutboundSendNotify 配合写入平台 message_id 后再 EditMessage
         // 带一个本地路径（或其它 Locator）的附件：
-        // _ = clawbridge.Reply(ctx, &in, "请看附件", "/tmp/out.png")
+        // if _, err := clawbridge.Reply(ctx, &in, "请看附件", "/tmp/out.png"); err != nil { return }
     }
 }()
 ```

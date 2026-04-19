@@ -41,7 +41,7 @@ func TestBridgeNoopOutboundAndNoEditOrStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	editErr := b.EditMessage(ctx, &clawbridge.EditMessageRequest{
+	editErr := b.EditMessage(ctx, &clawbridge.OutboundMessage{
 		ClientID: "a",
 		To:       bus.Recipient{SessionID: "room1"},
 		Text:     "edited",
@@ -50,7 +50,7 @@ func TestBridgeNoopOutboundAndNoEditOrStatus(t *testing.T) {
 		t.Fatalf("EditMessage noop: want ErrCapabilityUnsupported, got %v", editErr)
 	}
 
-	stErr := b.UpdateStatus(ctx, &clawbridge.UpdateStatusRequest{
+	stErr := b.UpdateStatusRequest(ctx, &clawbridge.UpdateStatusRequest{
 		ClientID:  "a",
 		To:        bus.Recipient{SessionID: "room1"},
 		MessageID: "m1",

@@ -14,15 +14,23 @@ type (
 	Recipient           = bus.Recipient
 	MediaPart           = bus.MediaPart
 	UpdateStatusRequest = bus.UpdateStatusRequest
+	UpdateStatusState   = bus.UpdateStatusState
 	EditMessageRequest  = bus.EditMessageRequest
 
 	OutboundSendNotifyInfo = client.OutboundSendNotifyInfo
 	OutboundSendNotify     = client.OutboundSendNotify
 )
 
-// Message status constants (UpdateStatusRequest.State).
+// Message status string constants (UpdateStatusRequest.State and JSON wire values).
 const (
 	StatusProcessing = bus.StatusProcessing
 	StatusCompleted  = bus.StatusCompleted
 	StatusFailed     = bus.StatusFailed
+)
+
+// Typed message status for UpdateStatus(in, state, …); prefer these over raw strings.
+const (
+	UpdateStatusProcessing = bus.UpdateStatusProcessing
+	UpdateStatusCompleted  = bus.UpdateStatusCompleted
+	UpdateStatusFailed     = bus.UpdateStatusFailed
 )

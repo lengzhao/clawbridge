@@ -72,22 +72,22 @@ func PublishOutbound(ctx context.Context, msg *OutboundMessage) error {
 	return b.Bus().PublishOutbound(ctx, msg)
 }
 
-// UpdateStatus delegates to the default bridge Manager.
-func UpdateStatus(ctx context.Context, req *UpdateStatusRequest) error {
+// UpdateStatus delegates to the default bridge; routing matches Bridge.UpdateStatus / Reply.
+func UpdateStatus(ctx context.Context, in *InboundMessage, state UpdateStatusState, metadata map[string]string) error {
 	b, err := Instance()
 	if err != nil {
 		return err
 	}
-	return b.UpdateStatus(ctx, req)
+	return b.UpdateStatus(ctx, in, state, metadata)
 }
 
-// EditMessage delegates to the default bridge Manager.
-func EditMessage(ctx context.Context, req *EditMessageRequest) error {
+// EditMessage delegates to the default bridge; fields match OutboundMessage (see Bridge.EditMessage).
+func EditMessage(ctx context.Context, out *OutboundMessage) error {
 	b, err := Instance()
 	if err != nil {
 		return err
 	}
-	return b.EditMessage(ctx, req)
+	return b.EditMessage(ctx, out)
 }
 
 // ConsumeInbound consumes from the default bridge bus.
@@ -99,11 +99,11 @@ func ConsumeInbound(ctx context.Context) (InboundMessage, error) {
 	return b.Bus().ConsumeInbound(ctx)
 }
 
-// Reply replies via the default bridge.
-func Reply(ctx context.Context, in *InboundMessage, text, mediaPath string) error {
+// Reply replies via the default bridge and returns the outbound message that was queued.
+func Reply(ctx context.Context, in *InboundMessage, text, mediaPath string) (*OutboundMessage, error) {
 	b, err := Instance()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	return b.Reply(ctx, in, text, mediaPath)
 }
