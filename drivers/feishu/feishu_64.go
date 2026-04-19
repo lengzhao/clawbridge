@@ -211,6 +211,16 @@ func (d *driver) Send(ctx context.Context, msg *bus.OutboundMessage) (string, er
 	return mid, nil
 }
 
+func (d *driver) Reply(ctx context.Context, in *bus.InboundMessage, text, mediaPath string) (*bus.OutboundMessage, error) {
+	msg := client.DefaultReplyOutbound(in, text, mediaPath)
+	id, err := d.Send(ctx, msg)
+	if err != nil {
+		return nil, err
+	}
+	msg.MessageID = id
+	return msg, nil
+}
+
 func (d *driver) UpdateStatus(ctx context.Context, req *bus.UpdateStatusRequest) error {
 	if req == nil {
 		return errors.New("feishu: nil UpdateStatusRequest")
@@ -298,25 +308,28 @@ func (d *driver) deleteMessageReaction(ctx context.Context, messageID, reactionI
 	return nil
 }
 
-func (d *driver) EditMessage(ctx context.Context, req *bus.EditMessageRequest) error {
+func (d *driver) EditMessage(ctx context.Context, msg *bus.OutboundMessage) error {
 	if !d.run.Load() {
 		return errNotRunning
 	}
-	mid := req.MessageID
+	if msg == nil {
+		return errors.New("feishu: nil OutboundMessage")
+	}
+	mid := msg.MessageID
 	if mid == "" {
 		var ok bool
-		mid, ok = d.lastSent.get(req.To)
+		mid, ok = d.lastSent.get(msg.To)
 		if !ok || mid == "" {
 			return bus.ErrInvalidOutbound
 		}
 	}
-	if len(req.Parts) > 0 {
+	if len(msg.Parts) > 0 {
 		return fmt.Errorf("feishu: edit Parts: %w", client.ErrCapabilityUnsupported)
 	}
-	if req.Text == "" {
+	if msg.Text == "" {
 		return bus.ErrInvalidOutbound
 	}
-	content, _ := json.Marshal(map[string]string{"text": req.Text})
+	content, _ := json.Marshal(map[string]string{"text": msg.Text})
 	up := larkim.NewUpdateMessageReqBuilder().
 		MessageId(mid).
 		Body(larkim.NewUpdateMessageReqBodyBuilder().
@@ -868,4 +881,8 @@ func (d *driver) invalidateTokenOnAuthError(code int) {
 	}
 }
 
-var _ client.MessageStatusUpdater = (*driver)(nil)
+var (
+	_ client.MessageStatusUpdater = (*driver)(nil)
+	_ client.MessageEditor        = (*driver)(nil)
+	_ client.Replier              = (*driver)(nil)
+)

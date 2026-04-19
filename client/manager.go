@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 
 	"github.com/lengzhao/clawbridge/bus"
@@ -125,24 +126,65 @@ func (m *Manager) UpdateStatus(ctx context.Context, req *bus.UpdateStatusRequest
 }
 
 // EditMessage dispatches to the driver if it implements MessageEditor.
-func (m *Manager) EditMessage(ctx context.Context, req *bus.EditMessageRequest) error {
-	if req == nil {
-		return errors.New("client: nil EditMessageRequest")
+func (m *Manager) EditMessage(ctx context.Context, msg *bus.OutboundMessage) error {
+	if msg == nil {
+		return errors.New("client: nil OutboundMessage")
 	}
 	m.mu.RLock()
-	d, ok := m.drivers[req.ClientID]
+	d, ok := m.drivers[msg.ClientID]
 	m.mu.RUnlock()
 	if !ok {
-		slog.Error("edit message: unknown client_id", "client_id", req.ClientID)
-		return fmt.Errorf("unknown client_id %q", req.ClientID)
+		slog.Error("edit message: unknown client_id", "client_id", msg.ClientID)
+		return fmt.Errorf("unknown client_id %q", msg.ClientID)
 	}
 	e, ok := d.(MessageEditor)
 	if !ok {
 		return ErrCapabilityUnsupported
 	}
-	if err := e.EditMessage(ctx, req); err != nil {
-		slog.Error("edit message", "client_id", req.ClientID, "err", err)
+	if err := e.EditMessage(ctx, msg); err != nil {
+		slog.Error("edit message", "client_id", msg.ClientID, "err", err)
 		return err
 	}
 	return nil
+}
+
+// Reply sends a reply for the inbound message. If the driver implements [Replier], that path is used
+// and [OutboundSendNotify] is invoked synchronously on success. Otherwise the default outbound
+// message is published and delivery follows [HandleOutbound] (notify after Send).
+func (m *Manager) Reply(ctx context.Context, in *bus.InboundMessage, text, mediaPath string) (*bus.OutboundMessage, error) {
+	if in == nil || (strings.TrimSpace(text) == "" && mediaPath == "") {
+		return nil, ErrInvalidReply
+	}
+	m.mu.RLock()
+	d, ok := m.drivers[in.ClientID]
+	m.mu.RUnlock()
+	if !ok {
+		slog.Error("reply: unknown client_id", "client_id", in.ClientID)
+		return nil, fmt.Errorf("unknown client_id %q", in.ClientID)
+	}
+	if r, ok := d.(Replier); ok {
+		msg, err := r.Reply(ctx, in, text, mediaPath)
+		if err != nil {
+			if m.outboundNotify != nil {
+				m.outboundNotify(ctx, OutboundSendNotifyInfo{Message: msg, Err: err})
+			}
+			return nil, err
+		}
+		if msg == nil {
+			err := errors.New("client: Replier returned nil message")
+			if m.outboundNotify != nil {
+				m.outboundNotify(ctx, OutboundSendNotifyInfo{Message: nil, Err: err})
+			}
+			return nil, err
+		}
+		if m.outboundNotify != nil {
+			m.outboundNotify(ctx, OutboundSendNotifyInfo{Message: msg, Err: nil, MessageID: msg.MessageID})
+		}
+		return msg, nil
+	}
+	msg := DefaultReplyOutbound(in, text, mediaPath)
+	if err := m.bus.PublishOutbound(ctx, msg); err != nil {
+		return nil, err
+	}
+	return msg, nil
 }

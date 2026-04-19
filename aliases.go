@@ -15,10 +15,10 @@ type (
 	MediaPart           = bus.MediaPart
 	UpdateStatusRequest = bus.UpdateStatusRequest
 	UpdateStatusState   = bus.UpdateStatusState
-	EditMessageRequest  = bus.EditMessageRequest
 
 	OutboundSendNotifyInfo = client.OutboundSendNotifyInfo
 	OutboundSendNotify     = client.OutboundSendNotify
+	Replier                = client.Replier
 )
 
 // Message status string constants (UpdateStatusRequest.State and JSON wire values).

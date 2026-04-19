@@ -80,7 +80,7 @@ func TestEditMessageUnknownClient(t *testing.T) {
 	ctx := context.Background()
 	mb := bus.NewMessageBus()
 	m := client.NewManager(mb, nil)
-	err := m.EditMessage(ctx, &bus.EditMessageRequest{
+	err := m.EditMessage(ctx, &bus.OutboundMessage{
 		ClientID: "nope",
 		To:       bus.Recipient{SessionID: "c"},
 		Text:     "x",

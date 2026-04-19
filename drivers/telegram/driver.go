@@ -248,6 +248,16 @@ func (d *driver) Send(ctx context.Context, msg *bus.OutboundMessage) (string, er
 	return lastID, nil
 }
 
+func (d *driver) Reply(ctx context.Context, in *bus.InboundMessage, text, mediaPath string) (*bus.OutboundMessage, error) {
+	msg := client.DefaultReplyOutbound(in, text, mediaPath)
+	id, err := d.Send(ctx, msg)
+	if err != nil {
+		return nil, err
+	}
+	msg.MessageID = id
+	return msg, nil
+}
+
 type sendChunkParams struct {
 	chatID        int64
 	threadID      int
@@ -286,15 +296,15 @@ func (d *driver) sendChunk(ctx context.Context, params sendChunkParams) (string,
 	return strconv.Itoa(pMsg.MessageID), nil
 }
 
-func (d *driver) EditMessage(ctx context.Context, req *bus.EditMessageRequest) error {
-	if req == nil {
-		return errors.New("telegram: nil EditMessageRequest")
+func (d *driver) EditMessage(ctx context.Context, msg *bus.OutboundMessage) error {
+	if msg == nil {
+		return errors.New("telegram: nil OutboundMessage")
 	}
-	sessionID := strings.TrimSpace(req.To.SessionID)
+	sessionID := strings.TrimSpace(msg.To.SessionID)
 	if sessionID == "" {
 		return nil
 	}
-	midStr := strings.TrimSpace(req.MessageID)
+	midStr := strings.TrimSpace(msg.MessageID)
 	if midStr == "" {
 		return client.ErrCapabilityUnsupported
 	}
@@ -306,7 +316,7 @@ func (d *driver) EditMessage(ctx context.Context, req *bus.EditMessageRequest) e
 	if err != nil {
 		return err
 	}
-	content := strings.TrimSpace(req.Text)
+	content := strings.TrimSpace(msg.Text)
 	parsedContent := parseContent(content, d.useMarkdownV2)
 	editMsg := tu.EditMessageText(tu.ID(cid), mid, parsedContent)
 	if d.useMarkdownV2 {
@@ -928,4 +938,5 @@ func isPostConnectError(err error) bool {
 
 var (
 	_ client.MessageEditor = (*driver)(nil)
+	_ client.Replier       = (*driver)(nil)
 )

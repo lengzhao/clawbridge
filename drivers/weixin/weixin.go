@@ -380,3 +380,15 @@ func (d *driver) Send(ctx context.Context, msg *bus.OutboundMessage) (string, er
 
 	return "", nil
 }
+
+func (d *driver) Reply(ctx context.Context, in *bus.InboundMessage, text, mediaPath string) (*bus.OutboundMessage, error) {
+	msg := client.DefaultReplyOutbound(in, text, mediaPath)
+	id, err := d.Send(ctx, msg)
+	if err != nil {
+		return nil, err
+	}
+	msg.MessageID = id
+	return msg, nil
+}
+
+var _ client.Replier = (*driver)(nil)

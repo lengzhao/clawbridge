@@ -9,4 +9,5 @@ var (
 	ErrSendFailed            = errors.New("clawbridge: send failed")
 	ErrUnknownDriver         = errors.New("clawbridge: unknown driver")
 	ErrCapabilityUnsupported = errors.New("clawbridge: driver does not support this capability")
+	ErrInvalidReply          = errors.New("clawbridge: invalid reply parameters")
 )

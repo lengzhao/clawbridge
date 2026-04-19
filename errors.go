@@ -20,4 +20,5 @@ var (
 	ErrSendFailed            = client.ErrSendFailed
 	ErrUnknownDriver         = client.ErrUnknownDriver
 	ErrCapabilityUnsupported = client.ErrCapabilityUnsupported
+	ErrInvalidReply          = client.ErrInvalidReply
 )

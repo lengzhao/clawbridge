@@ -177,7 +177,8 @@ type OutboundMessage struct {
 **可选接口（与 `Send` 分离，见 [public-api.md](./public-api.md) §2.1、§3.4）**：
 
 - **`MessageStatusUpdater`**：`UpdateStatus(ctx, *UpdateStatusRequest) error`。更新 **单条已存在消息** 的 UI 状态（**消息级**，例如「处理中 / 处理完成 / 处理异常」），**不是**会话级打字；请求中 **`MessageID` 必填**。宿主侧可使用根包 **`UpdateStatus(ctx, in, state, metadata)`**，由入站消息推导 `ClientID`/`To`/`MessageID`（见 public-api §1.3）。
-- **`MessageEditor`**：`EditMessage(ctx, *EditMessageRequest) error`。编辑已发送内容；**不**通过 `OutboundMessage.Metadata` 伪装成发送。若 **`MessageID` 为空**，约定为 **该 `ClientID` + `To` 下最近一次成功 `Send` 的消息**（细则见 public-api §2.2.1）。根包 / `Bridge` 对外提供 **`EditMessage(ctx, *OutboundMessage)`**，将 `OutboundMessage`（含可选 `message_id`）映射为上述请求。
+- **`MessageEditor`**：`EditMessage(ctx, *OutboundMessage) error`。编辑已发送内容；**不**通过「仅改 `Metadata` 却走 `Send`」伪装成编辑；宿主可用 **`Metadata` / `ThreadID` 等** 传递 Driver 私有扩展。若 **`MessageID` 为空**，约定为 **该 `ClientID` + `To` 下最近一次成功 `Send` 的消息**（细则见 public-api §2.2.1）。根包 / `Bridge` 的 **`EditMessage(ctx, *OutboundMessage)`** 原样传入 Manager。
+- **`Replier`**（可选）：`Reply(ctx, *InboundMessage, text, mediaPath) (*OutboundMessage, error)`。实现后 **`Manager.Reply`** / 根包 **`Reply`** 直接调用 Driver，**不**经出站队列；未实现时仍 **`PublishOutbound`** 默认组装的 `OutboundMessage`。成功时 **`OutboundSendNotify`** 在 Replier 路径上**同步**调用（见 public-api）。
 
 占位符、卡片内部多步刷新等仍属 **Driver 实现细节**，不必暴露为上述接口。
 

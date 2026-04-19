@@ -123,7 +123,7 @@ type Option func(*bridgeOptions)
 // 未设置时，New **仅**根据 Config.Media 构造内置 **local** 实现，**不包含** S3 等云端配置项。
 func WithMediaBackend(b media.Backend) Option
 
-// WithOutboundSendNotify 在每次 Driver.Send 结束后调用（成功或失败）；info 含 Message、Err、成功时的 MessageID（见 §4）。
+// WithOutboundSendNotify：在每次 Driver.Send 结束后调用（成功或失败）；若 Driver 实现 Replier，在 Reply 成功/失败时**同步**调用（不经出站队列）。info 含 Message、Err、成功时的 MessageID（见 §4）。
 // 本库不在 Manager 内重试；失败时可自行 [Bus.PublishOutbound] 再投队列（建议 errors.Is 判断临时错误并加退避/限流）。
 func WithOutboundSendNotify(n OutboundSendNotify) Option
 
@@ -147,14 +147,14 @@ func (b *Bridge) Media() media.Backend
 // Bus 返回消息总线；宿主通过 ConsumeInbound / PublishOutbound 与库交互（见 §3）。
 func (b *Bridge) Bus() *bus.MessageBus
 
-// Reply 快捷回复入站会话：语义与 §1.3 包级 Reply 相同；成功时返回已组装的 *OutboundMessage（与入队内容一致）。
+// Reply 快捷回复入站会话：语义与 §1.3 包级 Reply 相同；委托 Manager.Reply（Driver 可选实现 Replier，否则 PublishOutbound）。
 func (b *Bridge) Reply(ctx context.Context, in *InboundMessage, text, mediaPath string) (*OutboundMessage, error)
 
 // UpdateStatus / UpdateStatusRequest / EditMessage 委托给内部 Manager：仅当对应 Driver 实现可选接口时成功；否则返回 ErrCapabilityUnsupported（见 §3.4）。
+// Manager 还提供 Reply（包级 Reply 委托之）；EditMessage 与 Driver 的 MessageEditor 均使用 *OutboundMessage。
 func (b *Bridge) UpdateStatus(ctx context.Context, in *InboundMessage, state UpdateStatusState, metadata map[string]string) error
 func (b *Bridge) UpdateStatusRequest(ctx context.Context, req *UpdateStatusRequest) error
 func (b *Bridge) EditMessage(ctx context.Context, out *OutboundMessage) error
-func (b *Bridge) EditMessageRequest(ctx context.Context, req *EditMessageRequest) error
 ```
 
 **错误语义**：`New` 在配置非法、Driver 未知、内置 local `Media` 构造失败时返回错误；`Start` 在端口占用、鉴权失败等时返回错误。
@@ -184,7 +184,6 @@ type (
     MediaPart             = bus.MediaPart
     UpdateStatusRequest   = bus.UpdateStatusRequest
     UpdateStatusState     = bus.UpdateStatusState
-    EditMessageRequest    = bus.EditMessageRequest
 )
 
 var (
@@ -222,16 +221,16 @@ func UpdateStatus(ctx context.Context, in *InboundMessage, state UpdateStatusSta
 func Media() media.Backend
 ```
 
-**语义**：`PublishOutbound` / `ConsumeInbound` / `Media` / `Reply` / `UpdateStatus` / `EditMessage` 等价于 `Instance()` 取得默认 `*Bridge` 再委托；`Reply` 本质是 **组装 `OutboundMessage` 后调用 `PublishOutbound`** 并返回该消息；`EditMessage` 从 `*OutboundMessage` 组装 `EditMessageRequest` 后委托 Manager；`UpdateStatus` 本质是 **组装 `UpdateStatusRequest` 后委托 Manager**。
+**语义**：`PublishOutbound` / `ConsumeInbound` / `Media` / `Reply` / `UpdateStatus` / `EditMessage` 等价于 `Instance()` 取得默认 `*Bridge` 再委托；`Reply` 委托 **`Manager.Reply`**：若 Driver 实现 **`Replier`** 则走自定义回复（可写 `Metadata` 等）；否则 **组装 `OutboundMessage` 后 `PublishOutbound`** 并返回该消息；`EditMessage` 将 `*OutboundMessage` 交给 Driver；`UpdateStatus` 本质是 **组装 `UpdateStatusRequest` 后委托 Manager**。
 
-**Bridge / 包级「快捷方法」与底层请求对照**（需完整字段或自定义路由时用 `*Request` 系列）：
+**Bridge / 包级「快捷方法」与底层请求对照**（`UpdateStatus` 的完全自定义路由用 `UpdateStatusRequest`）：
 
 | 快捷方法 | 入参要点 | 底层 |
 |----------|----------|------|
-| `Reply(ctx, in, text, mediaPath)` | 从入站推导 `ClientID`、`To`、`ReplyToID` | `PublishOutbound` |
+| `Reply(ctx, in, text, mediaPath)` | 从入站推导 `ClientID`、`To`、`ReplyToID`；或 Driver 实现 `Replier` | `Manager.Reply` → `Replier` 或 `PublishOutbound` |
 | `UpdateStatus(ctx, in, state, metadata)` | 从入站推导路由，`state` 为 `UpdateStatusState` | `UpdateStatusRequest` |
-| `EditMessage(ctx, out)` | `out` 为 `*OutboundMessage`，含待编辑正文/附件与可选 `message_id` | `EditMessageRequest` |
-| `UpdateStatusRequest` / `EditMessageRequest` | 显式构造 | 直接交给 Manager → Driver |
+| `EditMessage(ctx, out)` | `out` 为 `*OutboundMessage`（含 `Metadata` 等供 Driver 扩展） | `Manager.EditMessage` → `MessageEditor` |
+| `UpdateStatusRequest` | 显式构造 | 直接交给 Manager → Driver |
 
 **`Reply` 字段映射（实现约定）**：
 
@@ -246,12 +245,7 @@ func Media() media.Backend
 | `Parts` | `mediaPath != ""` 时为单元素 `{Path: mediaPath}`，否则 `nil` |
 | `MessageID`（出站字段） | **不填**（`Send` 不需要）；若需引用已发送消息的 id，可在返回的 `*OutboundMessage` 上由 `OutboundSendNotify` 等异步填充后再用于 `EditMessage`） |
 
-**`EditMessage`（基于 `*OutboundMessage`）字段映射**：
-
-| `EditMessageRequest` 字段 | 来源 |
-|----------------------------|------|
-| `ClientID` / `To` / `Text` / `Parts` / `Metadata` | `out` 同名字段 |
-| `MessageID` | `out.MessageID`（空则 §2.2.1「最后一条发送」） |
+**`EditMessage`（基于 `*OutboundMessage`）**：Driver 的 **`MessageEditor.EditMessage(ctx, msg *OutboundMessage)`** 与宿主传入的 `out` 为同一结构；可选用 **`ThreadID` / `ReplyToID` / `Metadata`** 等做平台扩展（各 Driver 文档约定）。
 
 **`UpdateStatus` 字段映射（与 `Reply` 同源路由）**：
 
@@ -348,17 +342,6 @@ const (
     StatusCompleted  = "completed"  // 处理完成
     StatusFailed     = "failed"     // 处理异常（失败）；详情可放 Metadata，键名由 Driver 文档约定
 )
-
-// EditMessageRequest：编辑**已发送**的正文（及可选附件策略由 Driver 文档约定）。
-// 与 Send 分离；**不得**用 Metadata 把编辑塞进 Send。
-type EditMessageRequest struct {
-    ClientID  string            `json:"client_id"`
-    To        Recipient         `json:"to"`
-    MessageID string            `json:"message_id,omitempty"` // 空则见 §2.2.1
-    Text      string            `json:"text,omitempty"`
-    Parts     []MediaPart       `json:"parts,omitempty"`
-    Metadata  map[string]string `json:"metadata,omitempty"`
-}
 ```
 
 ### 2.2 字段约束摘要
@@ -369,11 +352,10 @@ type EditMessageRequest struct {
 | **Outbound**（`PublishOutbound` / `Send`） | `ClientID`、`To.SessionID`（及平台要求的其它字段）**必填**；`Text` 与 `Parts` 至少其一非空（否则实现可返回 `ErrInvalidMessage`）；`ReplyToID` / `ThreadID` **可选**；**`message_id` 在发送路径上由 Driver 忽略**（预留给引用/编辑场景，见下）。 |
 | **`EditMessage` 用的 `OutboundMessage`** | 与上表字段同源；**`message_id` 为空**时按 §2.2.1 解析为「最后一条成功 `Send`」；`Text`/`Parts` 是否允许全空由平台决定。 |
 | **UpdateStatusRequest** | `ClientID`、`To`、`MessageID`、`State` **必填**；`State` 为 §2.1 所列常量或 Driver 文档扩展值。 |
-| **EditMessageRequest** | `ClientID`、`To` **必填**；`MessageID` **可选**（空则 §2.2.1）；`Text` 与 `Parts` 是否允许全空由平台决定，实现可返回 `ErrInvalidMessage`。 |
 
 ### 2.2.1 「最后一条发送」的默认 MessageID（仅 Edit）
 
-对 **`EditMessageRequest`**：若 **`MessageID` 为空**，Driver **应**将其解析为：在本实例内，针对同一 **`ClientID` + `To`（按 `SessionID`、`Kind`、`UserID` 全字段参与匹配；空字符串与未设置视为同一键）** 下，**最近一次 `Send` 成功**所对应的那条消息的 **`MessageID`**。
+对 **`MessageEditor.EditMessage`** 收到的 **`OutboundMessage`**：若 **`message_id` 为空**，Driver **应**将其解析为：在本实例内，针对同一 **`ClientID` + `To`（按 `SessionID`、`Kind`、`UserID` 全字段参与匹配；空字符串与未设置视为同一键）** 下，**最近一次 `Send` 成功**所对应的那条消息的 **`MessageID`**。
 
 - **仅统计 `Send`**，不包含仅由平台产生、未经过本 Driver `Send` 的消息。
 - **并发**：以 **`Send` 成功返回的先后**为准维护「最后一条」；多 goroutine 同时发送时，宿主若需编辑指定条，**应显式填写 `MessageID`**。
@@ -509,9 +491,15 @@ type MessageStatusUpdater interface {
     UpdateStatus(ctx context.Context, req *bus.UpdateStatusRequest) error
 }
 
-// MessageEditor：编辑已发送内容；语义与 Send 分离；`MessageID` 空则见 §2.2.1。
+// MessageEditor：编辑已发送内容；语义与 Send 分离；入参为 *OutboundMessage（`MessageID` 空则见 §2.2.1）。
 type MessageEditor interface {
-    EditMessage(ctx context.Context, req *bus.EditMessageRequest) error
+    EditMessage(ctx context.Context, msg *bus.OutboundMessage) error
+}
+
+// Replier：可选；实现后 Bridge.Reply / Manager.Reply 走此路径，否则走 PublishOutbound。
+// 内置 drivers 均实现本接口（等价于 client.DefaultReplyOutbound + Driver.Send，并回填平台 MessageID）。
+type Replier interface {
+    Reply(ctx context.Context, in *bus.InboundMessage, text, mediaPath string) (*bus.OutboundMessage, error)
 }
 
 func RegisterDriver(name string, f Factory)

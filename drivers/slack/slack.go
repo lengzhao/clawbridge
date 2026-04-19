@@ -190,6 +190,16 @@ func (d *driver) Send(ctx context.Context, msg *bus.OutboundMessage) (string, er
 	return lastTS, nil
 }
 
+func (d *driver) Reply(ctx context.Context, in *bus.InboundMessage, text, mediaPath string) (*bus.OutboundMessage, error) {
+	msg := client.DefaultReplyOutbound(in, text, mediaPath)
+	id, err := d.Send(ctx, msg)
+	if err != nil {
+		return nil, err
+	}
+	msg.MessageID = id
+	return msg, nil
+}
+
 func (d *driver) uploadMediaPart(ctx context.Context, channelID, threadTS string, part bus.MediaPart) error {
 	if d.mediab == nil {
 		return fmt.Errorf("slack: media backend is nil: %w", client.ErrSendFailed)
@@ -544,3 +554,5 @@ func parseSlackSessionID(sessionID string) (channelID, threadTS string) {
 	}
 	return channelID, threadTS
 }
+
+var _ client.Replier = (*driver)(nil)

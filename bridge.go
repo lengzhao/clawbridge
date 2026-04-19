@@ -2,6 +2,7 @@ package clawbridge
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -166,38 +167,18 @@ func (b *Bridge) EditMessage(ctx context.Context, out *OutboundMessage) error {
 	if out == nil {
 		return ErrInvalidMessage
 	}
-	req := &EditMessageRequest{
-		ClientID:  out.ClientID,
-		To:        out.To,
-		MessageID: out.MessageID,
-		Text:      out.Text,
-		Parts:     out.Parts,
-		Metadata:  out.Metadata,
-	}
-	return b.mgr.EditMessage(ctx, req)
+	return b.mgr.EditMessage(ctx, out)
 }
 
-// EditMessageRequest edits using a fully specified request.
-func (b *Bridge) EditMessageRequest(ctx context.Context, req *EditMessageRequest) error {
-	return b.mgr.EditMessage(ctx, req)
-}
-
-// Reply sends a quick reply derived from an inbound message and returns the outbound message that was queued.
+// Reply sends a quick reply derived from an inbound message and returns the outbound message.
+// If the driver implements [client.Replier], that path is used; otherwise the default message is published on the bus.
 func (b *Bridge) Reply(ctx context.Context, in *InboundMessage, text, mediaPath string) (*OutboundMessage, error) {
 	if in == nil || (text == "" && mediaPath == "") {
 		return nil, ErrInvalidMessage
 	}
-	msg := &OutboundMessage{
-		ClientID:  in.ClientID,
-		To:        Recipient{SessionID: in.SessionID, Kind: in.Peer.Kind},
-		Text:      text,
-		ReplyToID: in.MessageID,
+	msg, err := b.mgr.Reply(ctx, in, text, mediaPath)
+	if err != nil && errors.Is(err, client.ErrInvalidReply) {
+		return nil, ErrInvalidMessage
 	}
-	if mediaPath != "" {
-		msg.Parts = []MediaPart{{Path: mediaPath}}
-	}
-	if err := b.bus.PublishOutbound(ctx, msg); err != nil {
-		return nil, err
-	}
-	return msg, nil
+	return msg, err
 }

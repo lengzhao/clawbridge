@@ -644,6 +644,16 @@ func (d *driver) Send(ctx context.Context, msg *bus.OutboundMessage) (string, er
 	return outID, nil
 }
 
+func (d *driver) Reply(ctx context.Context, in *bus.InboundMessage, text, mediaPath string) (*bus.OutboundMessage, error) {
+	msg := client.DefaultReplyOutbound(in, text, mediaPath)
+	id, err := d.Send(ctx, msg)
+	if err != nil {
+		return nil, err
+	}
+	msg.MessageID = id
+	return msg, nil
+}
+
 // UpdateStatus 实现 client.MessageStatusUpdater：在页面上显示处理状态。
 func (d *driver) UpdateStatus(ctx context.Context, req *bus.UpdateStatusRequest) error {
 	_ = ctx
@@ -665,18 +675,18 @@ func (d *driver) UpdateStatus(ctx context.Context, req *bus.UpdateStatusRequest)
 }
 
 // EditMessage 实现 client.MessageEditor：更新已展示的助手气泡。
-func (d *driver) EditMessage(ctx context.Context, req *bus.EditMessageRequest) error {
+func (d *driver) EditMessage(ctx context.Context, msg *bus.OutboundMessage) error {
 	_ = ctx
-	if req == nil {
-		return errors.New("webchat: nil EditMessageRequest")
+	if msg == nil {
+		return errors.New("webchat: nil OutboundMessage")
 	}
-	chatID := strings.TrimSpace(req.To.SessionID)
+	chatID := strings.TrimSpace(msg.To.SessionID)
 	if chatID == "" {
 		return nil
 	}
-	id := strings.TrimSpace(req.MessageID)
+	id := strings.TrimSpace(msg.MessageID)
 	if id == "" {
-		key := bus.RecipientKey(req.To)
+		key := bus.RecipientKey(msg.To)
 		d.lastSentMu.RLock()
 		id = d.lastSent[key]
 		d.lastSentMu.RUnlock()
@@ -684,7 +694,7 @@ func (d *driver) EditMessage(ctx context.Context, req *bus.EditMessageRequest) e
 	if id == "" {
 		return client.ErrCapabilityUnsupported
 	}
-	text := strings.TrimSpace(req.Text)
+	text := strings.TrimSpace(msg.Text)
 	ev := chatEvent{Type: "edit", ChatID: chatID, ID: id, Text: text}
 	d.broadcastSSE(ev)
 	return nil
@@ -693,4 +703,5 @@ func (d *driver) EditMessage(ctx context.Context, req *bus.EditMessageRequest) e
 var (
 	_ client.MessageStatusUpdater = (*driver)(nil)
 	_ client.MessageEditor        = (*driver)(nil)
+	_ client.Replier              = (*driver)(nil)
 )

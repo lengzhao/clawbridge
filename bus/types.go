@@ -84,17 +84,6 @@ type UpdateStatusRequest struct {
 	Metadata  map[string]string `json:"metadata,omitempty"`
 }
 
-// EditMessageRequest edits an already sent message. Empty MessageID means last successful Send
-// for the same ClientID + To (RecipientKey); see public-api §2.2.1.
-type EditMessageRequest struct {
-	ClientID  string            `json:"client_id"`
-	To        Recipient         `json:"to"`
-	MessageID string            `json:"message_id,omitempty"`
-	Text      string            `json:"text,omitempty"`
-	Parts     []MediaPart       `json:"parts,omitempty"`
-	Metadata  map[string]string `json:"metadata,omitempty"`
-}
-
 // RecipientKey is a stable compound key for (SessionID, Kind, UserID), used for last-sent tracking.
 func RecipientKey(to Recipient) string {
 	return to.SessionID + "\x00" + to.Kind + "\x00" + to.UserID
