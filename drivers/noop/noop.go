@@ -11,6 +11,7 @@ import (
 
 func init() {
 	client.RegisterDriver("noop", New)
+	client.RegisterOnboarding("noop", newNoopOnboardingFlow, nil)
 }
 
 type driver struct {

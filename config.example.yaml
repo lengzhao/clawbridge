@@ -57,6 +57,7 @@ clients:
           - /ask
 
   # 微信：iLink Bot 长轮询（见 drivers/weixin，源自 PicoClaw）
+  # 扫码绑定：client.RunOnboarding + client.ReportOnboarding；示例 go run ./examples/weixin-onboard -listen 127.0.0.1:8769；-print-secrets 打印明文；-write-config 写入明文 YAML
   - id: weixin-bot-1
     driver: weixin
     enabled: false
