@@ -308,9 +308,9 @@ func (d *driver) handleInboundMessage(ctx context.Context, msg WeixinMessage) {
 	}
 
 	metadata := map[string]string{
-		"from_user_id":  fromUserID,
-		"context_token": msg.ContextToken,
-		"session_id":    msg.SessionID,
+		"from_user_id":      fromUserID,
+		MetaContextToken:    msg.ContextToken,
+		"session_id":        msg.SessionID,
 	}
 
 	if msg.ContextToken != "" {
@@ -358,6 +358,12 @@ func (d *driver) Send(ctx context.Context, msg *bus.OutboundMessage) (string, er
 	if ct, ok := d.contextTokens.Load(toUserID); ok {
 		contextToken, _ = ct.(string)
 	}
+	contextToken = strings.TrimSpace(contextToken)
+	usedMetaToken := false
+	if contextToken == "" && msg.Metadata != nil {
+		contextToken = strings.TrimSpace(msg.Metadata[MetaContextToken])
+		usedMetaToken = contextToken != ""
+	}
 	if contextToken == "" {
 		return "", fmt.Errorf("weixin: missing context token for chat %s: %w", toUserID, client.ErrSendFailed)
 	}
@@ -378,11 +384,17 @@ func (d *driver) Send(ctx context.Context, msg *bus.OutboundMessage) (string, er
 		}
 	}
 
+	if usedMetaToken {
+		d.contextTokens.Store(toUserID, contextToken)
+		d.persistContextTokens()
+	}
+
 	return "", nil
 }
 
 func (d *driver) Reply(ctx context.Context, in *bus.InboundMessage, text, mediaPath string) (*bus.OutboundMessage, error) {
 	msg := client.DefaultReplyOutbound(in, text, mediaPath)
+	d.mergeDeclaredOutboundMeta(in, msg)
 	id, err := d.Send(ctx, msg)
 	if err != nil {
 		return nil, err
@@ -391,4 +403,25 @@ func (d *driver) Reply(ctx context.Context, in *bus.InboundMessage, text, mediaP
 	return msg, nil
 }
 
+func (d *driver) mergeDeclaredOutboundMeta(in *bus.InboundMessage, msg *bus.OutboundMessage) {
+	if in == nil || in.Metadata == nil {
+		return
+	}
+	for _, k := range d.RequiredOutboundMetadataKeysForSend() {
+		v := strings.TrimSpace(in.Metadata[k])
+		if v == "" {
+			continue
+		}
+		if msg.Metadata == nil {
+			msg.Metadata = make(map[string]string)
+		}
+		msg.Metadata[k] = v
+	}
+}
+
+func (d *driver) RequiredOutboundMetadataKeysForSend() []string {
+	return []string{MetaContextToken}
+}
+
 var _ client.Replier = (*driver)(nil)
+var _ client.OutboundSendMetadataRequirements = (*driver)(nil)

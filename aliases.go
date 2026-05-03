@@ -18,7 +18,8 @@ type (
 
 	OutboundSendNotifyInfo = client.OutboundSendNotifyInfo
 	OutboundSendNotify     = client.OutboundSendNotify
-	Replier                = client.Replier
+	Replier                          = client.Replier
+	OutboundSendMetadataRequirements = client.OutboundSendMetadataRequirements
 )
 
 // Message status string constants (UpdateStatusRequest.State and JSON wire values).

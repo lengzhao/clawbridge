@@ -608,9 +608,20 @@ func outboundMediaKind(partType, filename, contentType string) int {
 		return UploadMediaTypeImage
 	case strings.HasPrefix(ct, "video/"):
 		return UploadMediaTypeVideo
-	default:
-		return UploadMediaTypeFile
 	}
+
+	if ext := filepath.Ext(filename); ext != "" {
+		if byExt := mime.TypeByExtension(strings.ToLower(ext)); byExt != "" {
+			ect := strings.ToLower(byExt)
+			switch {
+			case strings.HasPrefix(ect, "image/"):
+				return UploadMediaTypeImage
+			case strings.HasPrefix(ect, "video/"):
+				return UploadMediaTypeVideo
+			}
+		}
+	}
+	return UploadMediaTypeFile
 }
 
 func detectLocalContentType(localPath, hintContentType string) string {

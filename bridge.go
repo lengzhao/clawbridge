@@ -161,6 +161,12 @@ func (b *Bridge) UpdateStatusRequest(ctx context.Context, req *UpdateStatusReque
 	return b.mgr.UpdateStatus(ctx, req)
 }
 
+// RequiredOutboundMetadataKeysForSend returns metadata keys the driver's Send path may require on
+// OutboundMessage when credentials are not otherwise available (see client.OutboundSendMetadataRequirements).
+func (b *Bridge) RequiredOutboundMetadataKeysForSend(clientID string) ([]string, bool) {
+	return b.mgr.RequiredOutboundMetadataKeysForSend(clientID)
+}
+
 // EditMessage edits a sent message when the target driver implements MessageEditor.
 // Fields are taken from out (same shape as PublishOutbound / Reply); MessageID empty means last Send for ClientID+To (§2.2.1).
 func (b *Bridge) EditMessage(ctx context.Context, out *OutboundMessage) error {

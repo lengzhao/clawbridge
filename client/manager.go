@@ -125,6 +125,23 @@ func (m *Manager) UpdateStatus(ctx context.Context, req *bus.UpdateStatusRequest
 	return nil
 }
 
+// RequiredOutboundMetadataKeysForSend returns keys that should be present on OutboundMessage.Metadata
+// for Send to succeed when the driver declares extra requirements. The second result is false if
+// clientID is unknown or the driver does not implement [OutboundSendMetadataRequirements].
+func (m *Manager) RequiredOutboundMetadataKeysForSend(clientID string) ([]string, bool) {
+	m.mu.RLock()
+	d, ok := m.drivers[clientID]
+	m.mu.RUnlock()
+	if !ok {
+		return nil, false
+	}
+	r, ok := d.(OutboundSendMetadataRequirements)
+	if !ok {
+		return nil, false
+	}
+	return r.RequiredOutboundMetadataKeysForSend(), true
+}
+
 // EditMessage dispatches to the driver if it implements MessageEditor.
 func (m *Manager) EditMessage(ctx context.Context, msg *bus.OutboundMessage) error {
 	if msg == nil {

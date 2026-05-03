@@ -35,3 +35,11 @@ type MessageEditor interface {
 type Replier interface {
 	Reply(ctx context.Context, in *bus.InboundMessage, text, mediaPath string) (*bus.OutboundMessage, error)
 }
+
+// OutboundSendMetadataRequirements is implemented by drivers whose Send path needs specific
+// [bus.OutboundMessage.Metadata] keys when credentials are not otherwise available (e.g. synthetic
+// inbound / scheduled replay). Hosts may use [Manager.RequiredOutboundMetadataKeysForSend] to
+// snapshot values into persistent jobs. Keys must match the wire strings used in Metadata maps.
+type OutboundSendMetadataRequirements interface {
+	RequiredOutboundMetadataKeysForSend() []string
+}
