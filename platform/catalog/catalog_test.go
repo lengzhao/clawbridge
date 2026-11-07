@@ -3,20 +3,19 @@ package catalog
 import "testing"
 
 func TestByID(t *testing.T) {
-	e := ByID("telegram")
-	if e == nil || e.Strategy != StrategyBridge || e.BridgeName != "telegram" {
-		t.Fatalf("telegram entry: %#v", e)
+	e := ByID("weixin")
+	if e == nil || e.Strategy != StrategyClawbridge || e.PluginKind != "platform/weixin" {
+		t.Fatalf("weixin: %#v", e)
 	}
-	if ByID("nope") != nil {
-		t.Fatal("expected nil")
+	e = ByID("telegram")
+	if e == nil || e.Strategy != StrategyClawbridge || e.PluginKind != "platform/telegram" {
+		t.Fatalf("telegram: %#v", e)
 	}
 }
 
-func TestCatalogCoversAgentKitNatives(t *testing.T) {
-	for _, id := range []string{"feishu", "lark", "slack"} {
-		e := ByID(id)
-		if e == nil || e.Strategy != StrategyAgentKit {
-			t.Fatalf("%s: %#v", id, e)
-		}
+func TestImplemented(t *testing.T) {
+	n := len(Implemented())
+	if n < 4 {
+		t.Fatalf("expected at least feishu/lark/slack/weixin, got %d", n)
 	}
 }

@@ -7,7 +7,7 @@
 package clawbridge
 
 import (
-	_ "github.com/lengzhao/clawbridge/platform/cloudweb"
 	_ "github.com/lengzhao/clawbridge/platform/lark"
+	_ "github.com/lengzhao/clawbridge/platform/telegram"
 	_ "github.com/lengzhao/clawbridge/platform/weixin"
 )

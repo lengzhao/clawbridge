@@ -3,7 +3,7 @@ module github.com/lengzhao/clawbridge
 go 1.26.1
 
 require (
-	github.com/gorilla/websocket v1.5.3
+	github.com/go-telegram/bot v1.20.0
 	github.com/larksuite/oapi-sdk-go/v3 v3.11.0
 	github.com/lengzhao/agentkit v0.4.45
 	github.com/lengzhao/pluginkit v0.1.6
