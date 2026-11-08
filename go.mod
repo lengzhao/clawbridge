@@ -3,7 +3,9 @@ module github.com/lengzhao/clawbridge
 go 1.26.1
 
 require (
+	github.com/bwmarrin/discordgo v0.29.0
 	github.com/go-telegram/bot v1.20.0
+	github.com/gorilla/websocket v1.5.3
 	github.com/larksuite/oapi-sdk-go/v3 v3.11.0
 	github.com/lengzhao/agentkit v0.4.45
 	github.com/lengzhao/pluginkit v0.1.6
@@ -16,6 +18,7 @@ require (
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	golang.org/x/crypto v0.0.0-20210421170649-83a5a9bb288b // indirect
 	golang.org/x/image v0.46.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/term v0.13.0 // indirect

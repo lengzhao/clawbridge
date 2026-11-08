@@ -38,7 +38,7 @@ flowchart TB
 | `credentials` | 凭据槽 `Store`（keyring / memory） |
 | `platform/lark` | Lark/飞书扫码建应用 + auth 插件 |
 | `platform/weixin` | 微信 iLink，`platform/weixin` |
-| `platform/catalog` | 平台 id 清单：已装配 vs planned |
+| `platform/catalog` | 平台 id 清单：已装配 vs planned（含 telegram） |
 | `plugin` | `clawbridge/credentials-*` |
 
 **消息通道**：飞书/Lark/Slack → agentkit 内置；微信 → clawbridge。**其它 IM** 不在此仓库走中间协议，按计划在 `platform/<id>/` 直接实现 `agentkit.Platform`（可参考 cc-connect 同平台 driver 的协议逻辑，代码落在本仓库，不 `import` cc-connect）。
@@ -90,8 +90,8 @@ import (
 | 策略 | 说明 | 示例 |
 |------|------|------|
 | `agentkit` | 内置插件 | feishu, lark, slack |
-| `clawbridge` | 本仓库已实现 | weixin |
-| `planned` | 待在本仓库或 agentkit 新增原生 `platform/*` | telegram, discord, dingtalk, … |
+| `clawbridge` | 本仓库已实现 | weixin, telegram, discord |
+| `planned` | 待在本仓库或 agentkit 新增原生 `platform/*` | dingtalk, wecom, … |
 
 `catalog.Implemented()` 仅返回前两类中已有 `PluginKind` 的条目。  
 新增平台：**在 `platform/<name>/` 实现 Platform + 可选 Authenticator**，更新 catalog，**不**引入 Cloud Web / Bridge 类线协议依赖。

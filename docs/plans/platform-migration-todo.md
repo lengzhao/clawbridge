@@ -26,9 +26,9 @@
 
 | 顺序 | ID | cc-connect 路径 | 备注 |
 |------|-----|-----------------|------|
-| P0 | `telegram` | `platform/telegram/` | **进行中**：文本 MVP 已落地，待媒体/callback/流式 |
+| P0 | `telegram` | `platform/telegram/` | **进行中**：文本+媒体入站、图片/文件出站、proxy；待 callback/流式/reaction |
 | P1 | `dingtalk` | `platform/dingtalk/` | 流式 + 卡片，依赖 official stream SDK |
-| P1 | `discord` | `platform/discord/` | discordgo，网关 intents |
+| P1 | `discord` | `platform/discord/` | **进行中**：文本 MVP；待附件/流式/thread/slash |
 | P2 | `wecom` | `platform/wecom/` | 回调 + WebSocket，配置项多 |
 | P2 | `line` | `platform/line/` | Webhook 伺服 |
 | P3 | `qq` | `platform/qq/` | OneBot WS |

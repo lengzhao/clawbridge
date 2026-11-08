@@ -7,6 +7,7 @@
 package clawbridge
 
 import (
+	_ "github.com/lengzhao/clawbridge/platform/discord"
 	_ "github.com/lengzhao/clawbridge/platform/lark"
 	_ "github.com/lengzhao/clawbridge/platform/telegram"
 	_ "github.com/lengzhao/clawbridge/platform/weixin"

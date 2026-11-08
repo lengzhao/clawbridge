@@ -28,3 +28,10 @@ func TestNewRequiresToken(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+func TestNewRejectsBadProxy(t *testing.T) {
+	_, err := New(Config{Token: "tok", ProxyURL: "://bad"}, Deps{})
+	if err == nil {
+		t.Fatal("expected proxy parse error")
+	}
+}

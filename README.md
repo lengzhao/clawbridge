@@ -9,7 +9,9 @@ AgentKit **platform** 扩展库：微信 iLink 运行插件、Lark/飞书 setup 
 | Kind | 类型 |
 |------|------|
 | `platform/weixin` | `agentkit.Platform` |
-| `platform/telegram` | `agentkit.Platform`（文本 MVP） |
+| `platform/telegram` | `agentkit.Platform`（文本 + 图片/文件/语音入站，图片/文件出站） |
+| `platform/discord` | `agentkit.Platform`（文本 MVP：网关、群 @、分片出站） |
+| `platform/auth-discord` | `platform.Authenticator`（bot token） |
 | `platform/auth-telegram` | `platform.Authenticator`（bot token） |
 | `platform/auth-lark` | `platform.Authenticator` |
 | `platform/auth-feishu` | `platform.Authenticator` |
@@ -18,7 +20,7 @@ AgentKit **platform** 扩展库：微信 iLink 运行插件、Lark/飞书 setup 
 | `clawbridge/credentials-memory` | `credentials.Store` |
 
 Lark/飞书/Slack **消息收发**使用 agentkit 内置 `platform/*`（`_ "github.com/lengzhao/agentkit/plugins"`）。  
-更多 IM（Telegram、Discord 等）见 `platform/catalog`：当前为 **planned**，需在 `platform/<name>/` 按 `agentkit.Platform` **原生实现**，本仓库不提供 Cloud Web / 中间网关协议。
+更多 IM 见 `platform/catalog`：已实现条目走 agentkit 或 clawbridge `platform/*`；**planned** 平台需在 `platform/<name>/` 按 `agentkit.Platform` 原生实现（不走中间网关协议）。
 
 ## 使用
 

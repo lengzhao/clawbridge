@@ -11,6 +11,10 @@ func TestByID(t *testing.T) {
 	if e == nil || e.Strategy != StrategyClawbridge || e.PluginKind != "platform/telegram" {
 		t.Fatalf("telegram: %#v", e)
 	}
+	e = ByID("discord")
+	if e == nil || e.Strategy != StrategyClawbridge || e.PluginKind != "platform/discord" {
+		t.Fatalf("discord: %#v", e)
+	}
 }
 
 func TestImplemented(t *testing.T) {

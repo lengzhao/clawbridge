@@ -3,13 +3,12 @@ package telegram
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
-	"strconv"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -46,7 +45,7 @@ type delivery struct {
 	threadID int
 }
 
-// Platform 长轮询 Telegram Bot API，首版支持文本消息。
+// Platform 长轮询 Telegram Bot API（文本与常见媒体类型）。
 type Platform struct {
 	cfg      Config
 	deps     Deps
@@ -80,8 +79,12 @@ func New(cfg Config, deps Deps) (agentkit.Platform, error) {
 	common.WarnAllowFromEmpty("telegram", cfg.AllowFrom)
 	httpClient := &http.Client{Timeout: 90 * time.Second}
 	if u := strings.TrimSpace(cfg.ProxyURL); u != "" {
-		// Proxy wiring can be extended when needed; keep skeleton simple.
-		slog.Info("telegram: proxy URL set but not yet applied in skeleton", "proxy", u)
+		parsed, err := url.Parse(u)
+		if err != nil {
+			return nil, fmt.Errorf("telegram: invalid proxy URL: %w", err)
+		}
+		httpClient.Transport = &http.Transport{Proxy: http.ProxyURL(parsed)}
+		slog.Info("telegram: using proxy", "host", parsed.Host)
 	}
 	p := &Platform{
 		cfg:        cfg,
@@ -89,7 +92,7 @@ func New(cfg Config, deps Deps) (agentkit.Platform, error) {
 		inbox:      common.NewInbox(64),
 		httpClient: httpClient,
 	}
-	p.outbound = common.NewOutbound(p.sendText, p.sendUnsupportedMedia)
+	p.outbound = common.NewOutbound(p.sendText, p.sendMediaPart)
 	return p, nil
 }
 
@@ -156,88 +159,6 @@ func (p *Platform) run(ctx context.Context) {
 	b.Start(ctx)
 }
 
-func (p *Platform) handleMessage(ctx context.Context, msg *models.Message) {
-	msgTime := time.Unix(int64(msg.Date), 0)
-	if msgTime.Before(common.ProcessStartTime.Add(-2 * time.Second)) {
-		return
-	}
-	if msg.From == nil || strings.TrimSpace(msg.Text) == "" {
-		return
-	}
-	isGroup := msg.Chat.Type == models.ChatTypeGroup || msg.Chat.Type == models.ChatTypeSupergroup
-	threadID := 0
-	if msg.Chat.IsForum || !isGroup {
-		threadID = msg.MessageThreadID
-	}
-	userID := strconv.FormatInt(msg.From.ID, 10)
-	if !common.AllowList(p.cfg.AllowFrom, userID) {
-		return
-	}
-	if isGroup && !p.cfg.GroupReplyAll && !p.isDirectedAtBot(msg) {
-		return
-	}
-	msgID := strconv.Itoa(msg.ID)
-	if p.dedup.IsDuplicate("telegram:" + msgID) {
-		return
-	}
-	deliveryID := buildSessionKey(p.cfg.ShareSessionInChannel, msg.Chat.ID, threadID, msg.From.ID)
-	p.routes.Store(deliveryID, delivery{chatID: msg.Chat.ID, threadID: threadID})
-
-	botName := ""
-	p.mu.RLock()
-	if p.selfUser != nil {
-		botName = p.selfUser.Username
-	}
-	p.mu.RUnlock()
-	text := stripBotMention(msg.Text, botName)
-
-	userName := msg.From.Username
-	if userName == "" {
-		userName = strings.TrimSpace(msg.From.FirstName + " " + msg.From.LastName)
-	}
-	kind := "direct"
-	if isGroup {
-		kind = "group"
-	}
-	route := agentkit.SessionRouteInput{
-		Platform:    "telegram",
-		Instance:    p.platformInstance(),
-		DeliveryID:  deliveryID,
-		ChannelID:   channelID(msg.Chat.ID, threadID),
-		ScopeUserID: userID,
-		ThreadID:    strconv.Itoa(threadID),
-	}
-	wsOpts := common.InboundOptsFor(p.deps.Workspace)
-	event := common.InboundFromContent("", route, userID, text, "", nil, nil, nil, nil, wsOpts)
-	meta := map[string]any{
-		"sender_id": userID, "sender_name": userName, "chat_id": route.ChannelID,
-		"platform": "telegram", "message_id": msgID, "chat_type": kind,
-	}
-	event = common.WithMetadata(event, meta)
-
-	if p.deps.InboundPolicy != nil {
-		raw, _ := json.Marshal(msg)
-		in := ingress.Input{
-			Platform: "telegram", InstanceID: p.platformInstance(), Kind: ingress.Message,
-			ID: msgID, ChatID: route.ChannelID, UserID: userID, ConversationKind: kind,
-			Raw: raw, Message: &ingress.MessageFacts{HasText: true, AddressedToAgent: true},
-			Default: ingress.Plan{Agent: ingress.Submit, Handlers: true},
-		}
-		decision, err := p.deps.InboundPolicy.Evaluate(ctx, in)
-		if err != nil {
-			slog.Error("telegram: inbound policy", "error", err)
-			return
-		}
-		plan, err := ingress.Resolve(in, decision)
-		if err != nil || plan.Rejected || plan.Agent == ingress.Skip {
-			return
-		}
-	}
-	if err := p.inbox.Push(ctx, event); err != nil {
-		slog.Debug("telegram: inbox push", "error", err)
-	}
-}
-
 func (p *Platform) sendText(ctx context.Context, session agentkit.SessionID, text string) error {
 	raw, ok := p.routes.Load(session)
 	if !ok {
@@ -256,10 +177,6 @@ func (p *Platform) sendText(ctx context.Context, session agentkit.SessionID, tex
 	}
 	_, err := bot.SendMessage(ctx, params)
 	return err
-}
-
-func (p *Platform) sendUnsupportedMedia(context.Context, agentkit.SessionID, agentkit.ContentPart) error {
-	return errors.New("telegram: outbound media not implemented yet")
 }
 
 func drainPendingUpdates(token string, client *http.Client) {

@@ -29,7 +29,7 @@ var All = []Entry{
 	{ID: "slack", Label: "Slack", Strategy: StrategyAgentKit, PluginKind: "platform/slack"},
 	{ID: "weixin", Label: "微信", Strategy: StrategyClawbridge, PluginKind: "platform/weixin"},
 	{ID: "telegram", Label: "Telegram", Strategy: StrategyClawbridge, PluginKind: "platform/telegram"},
-	{ID: "discord", Label: "Discord", Strategy: StrategyPlanned},
+	{ID: "discord", Label: "Discord", Strategy: StrategyClawbridge, PluginKind: "platform/discord"},
 	{ID: "dingtalk", Label: "钉钉", Strategy: StrategyPlanned},
 	{ID: "wecom", Label: "企业微信", Strategy: StrategyPlanned},
 	{ID: "qq", Label: "QQ (OneBot)", Strategy: StrategyPlanned},
